@@ -1,5 +1,7 @@
 # Flex Auto Counter (`/flexac`)
 
+Part of **[Flex Fleet](https://github.com/BadBraddA1/flex-fleet)** — Fogarty Services Inc tooling for Flex.
+
 CLI that fills Flex’s **Add Serial Unit** popup. It writes incrementing **Stencil** values (same format as your inventory list), presses Enter (ADD), and can run a whole batch with one start.
 
 ## Stencil format
@@ -116,6 +118,17 @@ npm test
 npm run demo
 ```
 
-## Repo
+## Flex Fleet
 
-https://github.com/BadBraddA1/flex-auto-counter
+Install with the other Flex tools:
+
+```bash
+~/flex-fleet/bin/install-fleet.sh
+```
+
+| Command | Tool |
+|---------|------|
+| `/flexac` | This tool — stencil auto counter |
+| `/flexdr` / `/flexdrive` | [flex-drive-renamer](https://github.com/BadBraddA1/flex-drive-renamer) — barcode → `FSI_D_040` |
+
+Hub: https://github.com/BadBraddA1/flex-fleet
