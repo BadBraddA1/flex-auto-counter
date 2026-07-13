@@ -171,7 +171,7 @@
           </label>
           <label>
             Stencil
-            <input name="stencil" type="text" />
+            <input id="stencil" name="stencil" type="text" autocomplete="off" />
           </label>
           <label>
             Model Number
@@ -219,9 +219,12 @@
       </div>
 
       <p class="hint">
-        Practice mode: click <strong>Serial Number</strong>, then run
-        <code>npx flex-auto-counter -n CAM -c 5 -l 100</code> (or
-        <code>npm start -- …</code>). Enter submits when the checkbox is on.
+        <strong>Stencil-only:</strong> click Serial Number, then
+        <code>node src/cli.js -n CAM -c 5 -l 100 --countdown 3</code>
+        (Tabs ×3 → Stencil → Enter).<br />
+        <strong>With serial:</strong>
+        <code>node src/cli.js -n CAM -c 5 -l 100 --with-serial</code>
+        — type Serial here, press Enter in the terminal to fill Stencil + ADD.
       </p>
       <div class="log" id="log">Added units will appear here…</div>
     </div>
@@ -229,26 +232,36 @@
     <script>
       const form = document.getElementById("unit-form");
       const serial = document.getElementById("serial");
+      const stencil = document.getElementById("stencil");
       const log = document.getElementById("log");
       const addBtn = document.getElementById("add-btn");
       const enterMapsAdd = document.getElementById("enter-maps-add");
       let added = 0;
 
       function addUnit() {
-        const value = serial.value.trim();
-        if (!value) {
-          log.textContent = "Serial Number is empty — focus it and try again.";
+        const serialVal = serial.value.trim();
+        const stencilVal = stencil.value.trim();
+        if (!stencilVal) {
+          log.textContent = "Stencil is empty — tool should Tab here and type it.";
           return;
         }
         added += 1;
-        const line = `${added}. ADD → ${value}`;
-        if (log.textContent.startsWith("Added units") || log.textContent.startsWith("Serial Number")) {
+        const serialPart = serialVal ? serialVal : "(no serial)";
+        const line = `${added}. ADD → serial=${serialPart}  stencil=${stencilVal}`;
+        if (
+          log.textContent.startsWith("Added units") ||
+          log.textContent.startsWith("Stencil is empty")
+        ) {
           log.textContent = line;
         } else {
           log.textContent += "\n" + line;
         }
         log.scrollTop = log.scrollHeight;
         serial.value = "";
+        stencil.value = "";
+        form.querySelector('[name="barcode"]').value = "";
+        form.querySelector('[name="rfid"]').value = "";
+        // Mimic Flex: stay open and return focus to Serial for the next unit
         serial.focus();
       }
 

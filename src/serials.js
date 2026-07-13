@@ -1,5 +1,5 @@
 /**
- * Build the list of serial numbers to enter.
+ * Build the list of incrementing stencil (or other) labels.
  *
  * @param {object} opts
  * @param {string} opts.name - Prefix before the number (e.g. "CAM")
@@ -9,7 +9,7 @@
  * @param {string} [opts.separator=""] - Between name and number (e.g. "-" → CAM-101)
  * @returns {string[]}
  */
-export function buildSerials({ name, count, last, pad = 0, separator = "" }) {
+export function buildCounterValues({ name, count, last, pad = 0, separator = "" }) {
   if (!name || typeof name !== "string") {
     throw new Error("name is required");
   }
@@ -23,11 +23,14 @@ export function buildSerials({ name, count, last, pad = 0, separator = "" }) {
     throw new Error("pad must be a non-negative integer");
   }
 
-  const serials = [];
+  const values = [];
   for (let i = 1; i <= count; i++) {
     const n = last + i;
     const num = pad > 0 ? String(n).padStart(pad, "0") : String(n);
-    serials.push(`${name}${separator}${num}`);
+    values.push(`${name}${separator}${num}`);
   }
-  return serials;
+  return values;
 }
+
+/** @deprecated Use buildCounterValues — kept for older imports */
+export const buildSerials = buildCounterValues;

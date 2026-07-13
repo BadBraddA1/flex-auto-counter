@@ -1,7 +1,7 @@
 {
   "name": "flex-auto-counter",
   "version": "0.1.0",
-  "description": "CLI that types incrementing serial numbers into Flex's Add Serial Unit form and hits Enter for each.",
+  "description": "CLI that auto-fills incrementing Stencil values in Flex Add Serial Unit, with optional wait-for-serial mode.",
   "type": "module",
   "bin": {
     "flex-auto-counter": "./src/cli.js"
@@ -10,6 +10,7 @@
     "start": "node src/cli.js",
     "test": "node --test test/*.test.js",
     "demo": "node src/cli.js --dry-run --name UNIT --count 5 --last 100",
+    "demo:serial": "node src/cli.js --dry-run --with-serial --name UNIT --count 3 --last 100",
     "test-form": "node src/serve-test-form.js"
   },
   "engines": {
@@ -17,6 +18,7 @@
   },
   "keywords": [
     "flex",
+    "stencil",
     "serial",
     "counter",
     "automation",
