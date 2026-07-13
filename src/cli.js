@@ -3,15 +3,20 @@
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { buildCounterValues } from "./serials.js";
-import { fillStencilAndSubmit, sleep } from "./keyboard.js";
+import {
+  fillStencilAndSubmit,
+  sleep,
+  detectFlexApps,
+  activateApp,
+  getFrontmostApp,
+  looksLikeTerminalApp,
+} from "./keyboard.js";
 import { runWizard } from "./wizard.js";
-import { renderStatus, BOLD, GREEN, YELLOW, RED, RESET } from "./status.js";
-import { saveLastRun } from "./state.js";
+import { renderStatus, BOLD, GREEN, YELLOW, RED, RESET, CYAN, DIM } from "./status.js";
+import { saveLastRun, loadLastRun } from "./state.js";
 
-/** Matches Flex inventory stencils like "USB Drive - 022" */
 const DEFAULT_PAD = 3;
 const DEFAULT_SEP = " - ";
-/** Prefer Stencil-direct (0 tabs) — Tabbing often jumps browser/app chrome */
 const DEFAULT_TABS = 0;
 
 function printHelp() {
@@ -22,38 +27,27 @@ Stencil format:  "USB Drive - 022"
 
 Usage:
   /flexac                         Interactive walkthrough + live status
-  /flexac --name <n> --count <n> --last <n> [options]
+  /flexac --name <n> --count <n> --last <n> --app "Google Chrome"
 
-How typing works (important):
+How focus works:
+  We activate your browser by name (not Cmd+Tab). Pick it in the wizard
+  or pass --app "Google Chrome".
+
   1. Click the Stencil field in Flex
   2. Press Enter in this terminal
-  3. We Cmd+Tab back to Flex, paste the stencil, press Enter (ADD)
-  This avoids Tab keystrokes landing in Terminal or switching browser tabs.
-
-Required (flag mode):
-  --name, -n      Stencil name (e.g. "USB Drive")
-  --count, -c     How many units to add
-  --last, -l      Last stencil number already used
-
-Modes:
-  (default)       Stencil only
-  --with-serial   You type Serial; Enter here to paste stencil + ADD
+  3. We bring the browser forward, paste, press Enter (ADD)
 
 Options:
-  --tabs <n>      Tabs before paste (default: ${DEFAULT_TABS} = click Stencil yourself)
-                  Use --tabs 3 to start on Serial Number instead
-  --no-refocus    Skip Cmd+Tab back to Flex (only if Flex is already frontmost)
+  --app <name>    Browser/app Flex runs in (e.g. "Google Chrome", "Safari", "Arc")
+  --tabs <n>      Tabs before paste (default: 0 = click Stencil yourself)
+  --no-refocus    Do not activate the browser (Flex must already be frontmost)
   --pad <n>       Zero-pad width (default: ${DEFAULT_PAD})
   --sep <s>       Separator (default: " - ")
   --delay <ms>    Pause after each ADD (default: 500)
-  --refocus-delay <ms>  Wait after Cmd+Tab (default: 550)
-  --dry-run       Print the plan; no keyboard
-  --help, -h      Show this help
-
-Examples:
-  /flexac
-  /flexac -n "USB Drive" -c 10 -l 40
-  /flexac -n "USB Drive" -c 10 -l 40 --tabs 3
+  --refocus-delay <ms>  Wait after activating browser (default: 600)
+  --with-serial   Wait for you to type Serial each time
+  --dry-run       Print the plan only
+  --help, -h
 `);
 }
 
@@ -66,8 +60,9 @@ function parseArgs(argv) {
     separator: DEFAULT_SEP,
     tabs: DEFAULT_TABS,
     delay: 500,
-    refocusDelayMs: 550,
+    refocusDelayMs: 600,
     refocus: true,
+    flexApp: null,
     withSerial: false,
     dryRun: false,
     help: false,
@@ -95,6 +90,9 @@ function parseArgs(argv) {
         break;
       case "--no-refocus":
         args.refocus = false;
+        break;
+      case "--app":
+        args.flexApp = next();
         break;
       case "--name":
       case "-n":
@@ -124,7 +122,6 @@ function parseArgs(argv) {
         args.refocusDelayMs = Number(next());
         break;
       case "--countdown":
-        // kept for compat; ignored — we use Enter-to-start now
         next();
         break;
       default:
@@ -142,18 +139,86 @@ function showStatus(state) {
   console.log(renderStatus(state));
 }
 
+async function resolveFlexApp(args, rl) {
+  if (args.flexApp) return args.flexApp;
+
+  const saved = loadLastRun();
+  if (saved.flexApp) return saved.flexApp;
+
+  let detected = [];
+  try {
+    detected = await detectFlexApps();
+  } catch {
+    detected = [];
+  }
+
+  if (detected.length === 1) {
+    console.log(`${DIM}Using detected browser: ${detected[0]}${RESET}`);
+    return detected[0];
+  }
+
+  if (detected.length > 1) {
+    console.log(`\n${BOLD}Which browser is Flex in?${RESET}`);
+    detected.forEach((name, i) => {
+      console.log(`  ${CYAN}${i + 1}${RESET}) ${name}`);
+    });
+    const pick = await rl.question(`${CYAN}?${RESET} Choose 1–${detected.length} [1]: `);
+    const idx = pick.trim() === "" ? 1 : Number(pick);
+    if (Number.isInteger(idx) && idx >= 1 && idx <= detected.length) {
+      return detected[idx - 1];
+    }
+  }
+
+  const typed = await rl.question(
+    `${CYAN}?${RESET} App name (e.g. Google Chrome) [Google Chrome]: `
+  );
+  return typed.trim() || "Google Chrome";
+}
+
+async function smokeTestActivate(flexApp) {
+  process.stdout.write(
+    `${YELLOW}→${RESET} Testing focus: activating ${BOLD}${flexApp}${RESET}…\n`
+  );
+  await activateApp(flexApp);
+  await sleep(500);
+  const front = await getFrontmostApp();
+  if (looksLikeTerminalApp(front)) {
+    throw new Error(
+      `Could not bring “${flexApp}” forward (still “${front}”).\n` +
+        `Fix: System Settings → Privacy & Security → Accessibility → enable Terminal (and/or iTerm/Cursor).\n` +
+        `Also confirm the app name matches the menu bar exactly.`
+    );
+  }
+  process.stdout.write(
+    `${GREEN}✓${RESET} Frontmost is now ${BOLD}${front}${RESET}. Switching back so you can press Enter here…\n`
+  );
+  // Leave browser front for a moment so user sees it worked; they'll click Terminal for Enter
+}
+
 async function runSession(args, stencils, rl) {
+  const flexApp = await resolveFlexApp(args, rl);
+  args.flexApp = flexApp;
+
+  try {
+    await smokeTestActivate(flexApp);
+  } catch (err) {
+    console.error(`${RED}${err.message}${RESET}`);
+    process.exit(1);
+  }
+
   const modeLabel = args.withSerial
     ? "with serial (wait for you)"
     : "stencil only";
   const focusHint =
-    args.tabs === 0 ? "click Stencil in Flex" : "click Serial (Tab×" + args.tabs + ")";
+    args.tabs === 0
+      ? "click Stencil in Flex"
+      : "click Serial (Tab×" + args.tabs + ")";
   const recent = [];
   let done = 0;
 
   const base = () => ({
     name: args.name,
-    mode: `${modeLabel} · ${focusHint}`,
+    mode: `${modeLabel} · ${flexApp}`,
     total: stencils.length,
     done,
     current: null,
@@ -162,44 +227,34 @@ async function runSession(args, stencils, rl) {
     recent: [...recent],
   });
 
+  console.log(`
+${BOLD}Ready.${RESET} Click ${args.tabs === 0 ? "Stencil" : "Serial Number"} in Flex, then come back here.
+`);
+
   for (const [i, stencil] of stencils.entries()) {
     const next = stencils[i + 1] || null;
 
-    if (args.withSerial) {
-      showStatus({
-        ...base(),
-        current: stencil,
-        next,
-        phase: `Type Serial in Flex${args.tabs === 0 ? ", click Stencil" : ""}, then Enter here`,
-      });
-      await rl.question(
-        `${YELLOW}▸${RESET} Serial ready? Press ${BOLD}Enter${RESET} to paste ${BOLD}${stencil}${RESET} + ADD… `
-      );
-    } else {
-      // Wait before each unit so Cmd+Tab can return to Flex after Terminal focus
-      showStatus({
-        ...base(),
-        current: stencil,
-        next,
-        phase:
-          args.tabs === 0
-            ? "Click Stencil in Flex, then press Enter here"
-            : "Click Serial in Flex, then press Enter here",
-      });
-      await rl.question(
-        `${YELLOW}▸${RESET} Flex ready (${focusHint})? Press ${BOLD}Enter${RESET} for ${BOLD}${stencil}${RESET}… `
-      );
-    }
+    showStatus({
+      ...base(),
+      current: stencil,
+      next,
+      phase: args.withSerial
+        ? `Type Serial${args.tabs === 0 ? ", click Stencil" : ""}, Enter here`
+        : `Click field in Flex, then Enter here → ${stencil}`,
+    });
 
-    // Don't clear the screen right before keystrokes — keep Terminal quiet
+    await rl.question(
+      `${YELLOW}▸${RESET} ${focusHint}, then press ${BOLD}Enter${RESET} to activate ${BOLD}${flexApp}${RESET} + paste ${BOLD}${stencil}${RESET}… `
+    );
+
     process.stdout.write(
-      `${YELLOW}→${RESET} Switching to Flex, pasting ${BOLD}${stencil}${RESET}…\n`
+      `${YELLOW}→${RESET} Activating ${flexApp}, pasting ${BOLD}${stencil}${RESET}…\n`
     );
 
     try {
       await fillStencilAndSubmit(stencil, {
         tabs: args.tabs,
-        // Always refocus after Enter in this terminal (Terminal became frontmost)
+        flexApp,
         refocus: args.refocus,
         refocusDelayMs: args.refocusDelayMs,
         delayMs: 120,
@@ -212,9 +267,6 @@ async function runSession(args, stencils, rl) {
         phase: `Error: ${err.message}`,
       });
       console.error(`${RED}${err.message}${RESET}`);
-      console.error(
-        "Tip: click Stencil in Flex, run again. Accessibility: System Settings → Privacy & Security → Accessibility."
-      );
       const savePartial = await rl.question(
         `Save progress as last=${args.last + done}? (y/n) [n]: `
       );
@@ -225,6 +277,7 @@ async function runSession(args, stencils, rl) {
           count: args.count,
           withSerial: args.withSerial,
           tabs: args.tabs,
+          flexApp,
         });
       }
       process.exit(1);
@@ -246,7 +299,7 @@ async function runSession(args, stencils, rl) {
   }
 
   const confirm = await rl.question(
-    `${GREEN}▸${RESET} Did Flex look correct? Save last number as ${BOLD}${args.last + stencils.length}${RESET}? (y/n) [y]: `
+    `${GREEN}▸${RESET} Did Flex look correct? Save last=${BOLD}${args.last + stencils.length}${RESET}? (y/n) [y]: `
   );
   const ok =
     confirm.trim() === "" ||
@@ -259,13 +312,14 @@ async function runSession(args, stencils, rl) {
       count: args.count,
       withSerial: args.withSerial,
       tabs: args.tabs,
+      flexApp,
     });
     console.log(
-      `${GREEN}${BOLD}Saved.${RESET} Next time use last number: ${BOLD}${args.last + stencils.length}${RESET}\n`
+      `${GREEN}${BOLD}Saved.${RESET} Next last number: ${BOLD}${args.last + stencils.length}${RESET}\n`
     );
   } else {
     console.log(
-      `${YELLOW}Not saved.${RESET} Keep using last number: ${BOLD}${args.last}${RESET}\n`
+      `${YELLOW}Not saved.${RESET} Keep last number: ${BOLD}${args.last}${RESET}\n`
     );
   }
 }
@@ -327,13 +381,14 @@ async function main() {
     }
 
     if (args.dryRun) {
+      const app = args.flexApp || "(your browser)";
       console.log(
         `Will fill ${stencils.length} stencils: ${stencils[0]} … ${stencils.at(-1)}`
       );
       for (const [i, stencil] of stencils.entries()) {
         const steps = [
           "Enter here",
-          args.refocus !== false ? "Cmd+Tab→Flex" : null,
+          args.refocus !== false ? `activate ${app}` : null,
           args.tabs > 0 ? `Tab×${args.tabs}` : null,
           `paste "${stencil}"`,
           "Enter",

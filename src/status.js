@@ -76,9 +76,9 @@ ${BOLD}${CYAN}╔═════════════════════
 `);
 }
 
-export function printPrepChecklist(withSerial, stencilDirect = true) {
+export function printPrepChecklist(withSerial, stencilDirect = true, flexApp = "your browser") {
   console.log(`${BOLD}Before we start${RESET}`);
-  console.log(`  1. Open Flex → ${BOLD}Add Serial Unit${RESET}`);
+  console.log(`  1. Open Flex in ${BOLD}${flexApp}${RESET} → Add Serial Unit`);
   console.log(`  2. Leave ${BOLD}Enter key mapped to ADD${RESET} checked`);
   if (withSerial) {
     console.log(`  3. Click ${BOLD}Serial Number${RESET}, type the serial`);
@@ -86,18 +86,18 @@ export function printPrepChecklist(withSerial, stencilDirect = true) {
       console.log(`  4. Click ${BOLD}Stencil${RESET}, then press Enter ${BOLD}here${RESET}`);
     } else {
       console.log(
-        `  4. Leave focus on Serial, then press Enter ${BOLD}here${RESET} (tool Tabs to Stencil)`
+        `  4. Leave focus on Serial, then press Enter ${BOLD}here${RESET}`
       );
     }
   } else if (stencilDirect) {
-    console.log(`  3. Click into the ${BOLD}Stencil${RESET} field in Flex`);
+    console.log(`  3. Click into the ${BOLD}Stencil${RESET} field`);
     console.log(
-      `  4. Come back and press Enter ${BOLD}here${RESET} — we Cmd+Tab back to Flex and paste`
+      `  4. Press Enter ${BOLD}here${RESET} — we activate ${flexApp} and paste`
     );
   } else {
     console.log(`  3. Click ${BOLD}Serial Number${RESET}`);
     console.log(
-      `  4. Press Enter ${BOLD}here${RESET} — we Cmd+Tab back to Flex, Tab to Stencil, paste`
+      `  4. Press Enter ${BOLD}here${RESET} — we activate ${flexApp}, Tab to Stencil, paste`
     );
   }
   console.log("");
