@@ -154,11 +154,13 @@ ${BOLD}Mode${RESET}
   const last = Number(lastRaw);
   const count = Number(countRaw);
   const withSerial = modeRaw === "2";
-  const tabs = defaults.tabs ?? DEFAULT_TABS_TO_STENCIL;
+  const tabs =
+    defaults.tabs ??
+    (Number.isInteger(saved.tabs) ? saved.tabs : DEFAULT_TABS_TO_STENCIL);
   const pad = defaults.pad ?? 3;
   const separator = defaults.separator ?? " - ";
-  const delay = defaults.delay ?? 500;
-  const refocusDelayMs = defaults.refocusDelayMs ?? 600;
+  const delay = defaults.delay ?? 900;
+  const refocusDelayMs = defaults.refocusDelayMs ?? 700;
 
   const stencils = buildCounterValues({ name, count, last, pad, separator });
 
@@ -167,10 +169,16 @@ ${BOLD}${GREEN}Plan${RESET}
   First:   ${stencils[0]}
   Last:    ${stencils.at(-1)}
   Total:   ${stencils.length}
-  Mode:    ${withSerial ? "with serial" : "stencil only"}
-  Path:    Open Add Serial Unit → Tab×${tabs} → Stencil → paste → Enter
+  Mode:    ${withSerial ? "with serial (Enter each unit)" : "stencil only (one Enter, then auto)"}
+  Path:    Tab×${tabs} → Stencil → paste → ADD
   Browser: ${flexApp}
 `);
+
+  if (!Number.isInteger(saved.tabs)) {
+    console.log(
+      `${YELLOW}Tip:${RESET} calibrate Tabs first if pastes miss Stencil:\n  /flexac --calibrate --app ${flexApp}\n`
+    );
+  }
 
   printPrepChecklist(withSerial, flexApp, tabs);
 

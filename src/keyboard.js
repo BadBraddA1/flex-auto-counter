@@ -43,31 +43,25 @@ export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Frontmost app name (e.g. "Google Chrome", "Terminal"). */
 export async function getFrontmostApp() {
   return runAppleScript(
     'tell application "System Events" to get name of first application process whose frontmost is true'
   );
 }
 
-/** Names of running application processes. */
 export async function listRunningAppNames() {
   const raw = await runAppleScript(
     'tell application "System Events" to get name of every application process whose background only is false'
   );
-  // osascript returns comma-separated list
   return raw
     .split(", ")
     .map((s) => s.trim())
     .filter(Boolean);
 }
 
-/** Running apps that look like a browser Flex would use. */
 export async function detectFlexApps() {
   const running = await listRunningAppNames();
-  const lowerToActual = new Map(
-    running.map((n) => [n.toLowerCase(), n])
-  );
+  const lowerToActual = new Map(running.map((n) => [n.toLowerCase(), n]));
   const found = [];
   for (const name of KNOWN_FLEX_APPS) {
     const actual = lowerToActual.get(name.toLowerCase());
@@ -78,16 +72,11 @@ export async function detectFlexApps() {
   return found;
 }
 
-/**
- * Resolve a user-facing app name to the real process name (case-insensitive).
- * Zen Browser’s process is "zen"; the app is "Zen".
- */
 export async function resolveProcessName(appName) {
   const running = await listRunningAppNames();
   const want = String(appName || "").trim().toLowerCase();
   const hit = running.find((n) => n.toLowerCase() === want);
   if (hit) return hit;
-  // Zen.app sometimes shows as Zen in the menu bar but process "zen"
   if (want === "zen browser") {
     const zen = running.find((n) => n.toLowerCase() === "zen");
     if (zen) return zen;
@@ -102,9 +91,6 @@ export function looksLikeTerminalApp(name) {
   return TERMINAL_APP_RE.test(String(name || "").trim());
 }
 
-/**
- * Bring an app to the front by process name (reliable; Cmd+Tab simulation is not).
- */
 export async function activateApp(appName) {
   const processName = await resolveProcessName(appName);
   const safe = escapeAppleScriptString(processName);
@@ -128,44 +114,19 @@ export async function activateApp(appName) {
 }
 
 /**
- * Watch for the user to focus Flex/browser, then remember that app name.
- * Call this while instructing them to click Stencil — Terminal may still be
- * frontmost at t=0; by the end they should have clicked the browser.
+ * One Tab at a time (separate osascript calls) so focus can settle.
+ * Batching Tabs in one script was landing on RFID / Location.
  */
-export async function captureFrontApp({
-  seconds = 5,
-  onTick,
-  rejectTerminal = true,
-} = {}) {
-  for (let s = seconds; s > 0; s--) {
-    onTick?.(s);
-    await sleep(1000);
-  }
-  const front = await getFrontmostApp();
-  if (rejectTerminal && looksLikeTerminalApp(front)) {
-    throw new Error(
-      `Still on “${front}”. Click the Stencil field in your browser, then try again.`
-    );
-  }
-  return front;
-}
-
-/** Press Tab `times` times (Serial → Barcode → RFID → Stencil = 3). */
-export async function pressTab(times = 1, { delayMs = 80 } = {}) {
+export async function pressTab(times = 1, { delayMs = 200 } = {}) {
   const n = Math.max(0, Number(times) || 0);
-  if (n === 0) return;
-
-  const lines = [];
   for (let i = 0; i < n; i++) {
-    lines.push("key code 48");
-    if (delayMs > 0) lines.push(`delay ${delayMs / 1000}`);
+    await runAppleScript(`
+      tell application "System Events"
+        key code 48
+      end tell
+    `);
+    await sleep(delayMs);
   }
-
-  await runAppleScript(`
-    tell application "System Events"
-      ${lines.join("\n      ")}
-    end tell
-  `);
 }
 
 export function copyToClipboard(text) {
@@ -182,6 +143,15 @@ export function copyToClipboard(text) {
   });
 }
 
+/** Select all in the focused field (Cmd+A) before paste. */
+export async function selectAll() {
+  await runAppleScript(`
+    tell application "System Events"
+      keystroke "a" using command down
+    end tell
+  `);
+}
+
 export async function pasteFromClipboard() {
   await runAppleScript(`
     tell application "System Events"
@@ -190,17 +160,21 @@ export async function pasteFromClipboard() {
   `);
 }
 
-export async function pressEnter({ delayMs = 80 } = {}) {
+export async function pressEnter({ delayMs = 100 } = {}) {
+  await sleep(delayMs);
   await runAppleScript(`
     tell application "System Events"
-      delay ${Math.max(delayMs, 0) / 1000}
       key code 36
     end tell
   `);
 }
 
 /**
- * Activate Flex app → optional Tab → paste stencil → Enter (ADD).
+ * Activate Flex → Tab to Stencil (slowly) → select-all → paste → Enter.
+ *
+ * @param {object} [opts]
+ * @param {boolean} [opts.refocus=true] activate browser first
+ * @param {boolean} [opts.submit=true] press Enter after paste
  */
 export async function fillStencilAndSubmit(
   text,
@@ -208,14 +182,16 @@ export async function fillStencilAndSubmit(
     tabs = 0,
     flexApp = null,
     refocus = true,
-    refocusDelayMs = 600,
-    delayMs = 120,
+    refocusDelayMs = 700,
+    tabDelayMs = 220,
+    delayMs = 150,
+    submit = true,
   } = {}
 ) {
   if (refocus) {
     if (!flexApp) {
       throw new Error(
-        "No Flex/browser app set. Re-run /flexac and pick your browser, or use --app \"Google Chrome\"."
+        'No Flex/browser app set. Re-run /flexac and pick your browser, or use --app Zen.'
       );
     }
     await activateApp(flexApp);
@@ -223,25 +199,26 @@ export async function fillStencilAndSubmit(
     const front = await getFrontmostApp();
     if (looksLikeTerminalApp(front)) {
       throw new Error(
-        `Could not switch to “${flexApp}” (still “${front}”). Check Accessibility permission for Terminal, then try again.`
+        `Could not switch to “${flexApp}” (still “${front}”). Check Accessibility for Terminal.`
       );
-    }
-    if (front.toLowerCase() !== String(flexApp).toLowerCase()) {
-      // Activated something, but not exact match — continue if not Terminal
-      // (process name vs application name can differ slightly)
     }
   }
 
   if (tabs > 0) {
-    await pressTab(tabs, { delayMs: Math.max(delayMs, 80) });
+    await pressTab(tabs, { delayMs: tabDelayMs });
     await sleep(delayMs);
   }
 
   await copyToClipboard(text);
-  await sleep(50);
+  await sleep(40);
+  await selectAll();
+  await sleep(60);
   await pasteFromClipboard();
   await sleep(delayMs);
-  await pressEnter({ delayMs });
+
+  if (submit) {
+    await pressEnter({ delayMs });
+  }
 }
 
 export async function tabTypeAndEnter(text, opts = {}) {

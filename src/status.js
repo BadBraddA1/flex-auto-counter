@@ -77,20 +77,18 @@ ${BOLD}${CYAN}╔═════════════════════
 }
 
 export function printPrepChecklist(withSerial, flexApp = "your browser", tabs = 3) {
-  console.log(`${BOLD}Your job each unit${RESET}`);
+  console.log(`${BOLD}How it runs${RESET}`);
   console.log(`  1. In ${BOLD}${flexApp}${RESET}, click ${BOLD}Add Serial Unit${RESET}`);
   console.log(`  2. Leave ${BOLD}Enter key mapped to ADD${RESET} checked`);
   if (withSerial) {
-    console.log(`  3. Type the ${BOLD}Serial Number${RESET} (cursor starts at the top)`);
-    console.log(`  4. Press Enter ${BOLD}here${RESET} — we Tab×${tabs} to Stencil, paste, ADD`);
+    console.log(`  3. Type ${BOLD}Serial${RESET} at the top, press Enter ${BOLD}here${RESET} each unit`);
+    console.log(`  4. We Tab×${tabs} → Stencil → paste → ADD`);
   } else {
-    console.log(
-      `  3. Press Enter ${BOLD}here${RESET} — we Tab×${tabs} to Stencil, paste, ADD`
-    );
+    console.log(`  3. Press Enter ${BOLD}here once${RESET} — we auto-run the whole batch`);
+    console.log(`  4. Each item: Tab×${tabs} → Stencil → paste → ADD → wait for top reset`);
   }
   console.log(`
-${DIM}After ADD, Flex jumps back to the top. For the next unit, open Add Serial Unit
-again (or leave it open if it stayed open) and press Enter here — we re-Tab.${RESET}
+${DIM}Wrong field (RFID / Location)? Run: /flexac --calibrate --app ${flexApp}${RESET}
 `);
 }
 

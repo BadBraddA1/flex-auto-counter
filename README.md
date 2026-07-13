@@ -22,19 +22,31 @@ Working title — rename anytime.
 /flexac -n "USB Drive" -c 5 -l 41 --app Zen
 ```
 
-### Workflow (each unit)
+### Workflow
 
-After ADD, Flex jumps focus back to the **top** of the form. So for every unit:
+**First time — calibrate Tabs** (fixes wrong field / RFID / Location):
 
-1. Click **Add Serial Unit** in Flex (cursor starts at Serial Number)
-2. Press **Enter** in the terminal
-3. We activate **Zen** (or your browser), **Tab×3** to Stencil, paste, ADD
+```bash
+/flexac --calibrate --app Zen
+```
 
-Repeat until the count is done. You don’t click Stencil yourself — we tab there from the top every time.
+Open Add Serial Unit, then answer yes when Stencil is focused. That Tab count is saved.
 
-With `--with-serial`: open Add Serial Unit, type the serial at the top, then Enter here.
+**Stencil only (no serial)** — one Enter, then auto:
 
-After a run it asks whether Flex looked correct before saving the next “last number”.
+```bash
+/flexac -n "USB Drive" -c 10 -l 41 --app Zen
+```
+
+1. Open **Add Serial Unit**  
+2. Press **Enter once** in the terminal  
+3. We Tab → paste → ADD → wait → repeat for the whole batch  
+
+**With serial** — Enter each unit after you type the serial:
+
+```bash
+/flexac -n "USB Drive" -c 10 -l 41 --app Zen --with-serial
+```
 
 Open a **new** terminal tab after install so `.zshenv` picks up the functions. Or run `source ~/.zshenv`.
 

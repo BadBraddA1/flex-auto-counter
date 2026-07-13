@@ -12,41 +12,45 @@ import {
   looksLikeTerminalApp,
 } from "./keyboard.js";
 import { runWizard } from "./wizard.js";
+import { runCalibrate } from "./calibrate.js";
 import { renderStatus, BOLD, GREEN, YELLOW, RED, RESET, CYAN, DIM } from "./status.js";
 import { saveLastRun, loadLastRun } from "./state.js";
 
 const DEFAULT_PAD = 3;
 const DEFAULT_SEP = " - ";
-/** Serial → Barcode → RFID → Stencil (Flex resets to top after each ADD) */
+/** Fallback before calibration — run /flexac --calibrate to learn the real count */
 const DEFAULT_TABS = 3;
+/** Wait after ADD so Flex can reset focus to the top before the next Tab cycle */
+const DEFAULT_DELAY = 900;
 
 function printHelp() {
   console.log(`
-Flex Auto Counter — auto-fill incrementing Stencil values in Add Serial Unit.
+Flex Auto Counter — fill Stencil in Add Serial Unit (auto-count).
 
 Stencil format:  "USB Drive - 022"
 
 Usage:
-  /flexac
-  /flexac --name <n> --count <n> --last <n> --app Zen
+  /flexac                         Walkthrough
+  /flexac --calibrate --app Zen   Learn how many Tabs reach Stencil (do this first)
+  /flexac -n "USB Drive" -c 10 -l 40 --app Zen
 
-Workflow (each unit):
-  1. Click Add Serial Unit in Flex (cursor starts at the top)
-  2. Press Enter in this terminal
-  3. We activate your browser, Tab×${DEFAULT_TABS} to Stencil, paste, ADD
-  After ADD, Flex jumps back to the top — open Add Serial Unit again for the next one.
+Stencil-only (no serial):
+  1. Open Add Serial Unit once
+  2. Press Enter here once
+  3. We run the whole batch: Tab → paste → ADD → wait → Tab → … (no more Enter)
+
+With serial (--with-serial):
+  Each unit: open Add Serial Unit, type Serial, Enter here — we Tab to Stencil + ADD
 
 Options:
-  --app <name>    Browser (e.g. Zen, Google Chrome)
-  --tabs <n>      Tabs from top to Stencil (default: ${DEFAULT_TABS})
-  --no-refocus    Do not activate the browser
-  --pad <n>       Zero-pad width (default: ${DEFAULT_PAD})
-  --sep <s>       Separator (default: " - ")
-  --delay <ms>    Pause after each ADD (default: 500)
-  --refocus-delay <ms>  Wait after activating browser (default: 600)
-  --with-serial   You type Serial at the top first each time
-  --dry-run
-  --help, -h
+  --calibrate     Find the correct Tab count to Stencil (saves it)
+  --app <name>    Browser (Zen, Google Chrome, …)
+  --tabs <n>      Tabs from top to Stencil (default: saved or ${DEFAULT_TABS})
+  --with-serial   Pause for Serial each unit
+  --delay <ms>    Pause after each ADD (default: ${DEFAULT_DELAY})
+  --refocus-delay <ms>  Wait after activating browser (default: 700)
+  --no-refocus    Do not activate browser
+  --pad / --sep / --dry-run / --help
 `);
 }
 
@@ -57,13 +61,15 @@ function parseArgs(argv) {
     last: null,
     pad: DEFAULT_PAD,
     separator: DEFAULT_SEP,
-    tabs: DEFAULT_TABS,
-    delay: 500,
-    refocusDelayMs: 600,
+    tabs: null, // null = use saved / default
+    tabsExplicit: false,
+    delay: DEFAULT_DELAY,
+    refocusDelayMs: 700,
     refocus: true,
     flexApp: null,
     withSerial: false,
     dryRun: false,
+    calibrate: false,
     help: false,
     wizard: false,
   };
@@ -83,6 +89,9 @@ function parseArgs(argv) {
         break;
       case "--dry-run":
         args.dryRun = true;
+        break;
+      case "--calibrate":
+        args.calibrate = true;
         break;
       case "--with-serial":
         args.withSerial = true;
@@ -113,6 +122,7 @@ function parseArgs(argv) {
         break;
       case "--tabs":
         args.tabs = Number(next());
+        args.tabsExplicit = true;
         break;
       case "--delay":
         args.delay = Number(next());
@@ -129,6 +139,14 @@ function parseArgs(argv) {
   }
 
   return args;
+}
+
+function resolveTabs(args) {
+  if (args.tabsExplicit && Number.isInteger(args.tabs)) return args.tabs;
+  if (Number.isInteger(args.tabs)) return args.tabs;
+  const saved = loadLastRun();
+  if (Number.isInteger(saved.tabs)) return saved.tabs;
+  return DEFAULT_TABS;
 }
 
 function showStatus(state) {
@@ -184,19 +202,27 @@ async function smokeTestActivate(flexApp) {
   if (looksLikeTerminalApp(front)) {
     throw new Error(
       `Could not bring “${flexApp}” forward (still “${front}”).\n` +
-        `Fix: System Settings → Privacy & Security → Accessibility → enable Terminal (and/or iTerm/Cursor).\n` +
-        `Also confirm the app name matches the menu bar exactly.`
+        `Fix: System Settings → Privacy & Security → Accessibility → enable Terminal.`
     );
   }
   process.stdout.write(
-    `${GREEN}✓${RESET} Frontmost is now ${BOLD}${front}${RESET}. Switching back so you can press Enter here…\n`
+    `${GREEN}✓${RESET} Frontmost is now ${BOLD}${front}${RESET}.\n`
   );
-  // Leave browser front for a moment so user sees it worked; they'll click Terminal for Enter
 }
 
 async function runSession(args, stencils, rl) {
   const flexApp = await resolveFlexApp(args, rl);
   args.flexApp = flexApp;
+  args.tabs = resolveTabs(args);
+
+  const saved = loadLastRun();
+  if (!args.tabsExplicit && !Number.isInteger(saved.tabs)) {
+    console.log(`
+${YELLOW}Tab count not calibrated yet${RESET} (using ${args.tabs}).
+If values land in RFID / Location / wrong fields, run:
+  ${BOLD}/flexac --calibrate --app ${flexApp}${RESET}
+`);
+  }
 
   try {
     await smokeTestActivate(flexApp);
@@ -206,8 +232,8 @@ async function runSession(args, stencils, rl) {
   }
 
   const modeLabel = args.withSerial
-    ? "with serial (wait for you)"
-    : "stencil only";
+    ? "with serial"
+    : "stencil only (auto batch)";
   const recent = [];
   let done = 0;
 
@@ -222,39 +248,70 @@ async function runSession(args, stencils, rl) {
     recent: [...recent],
   });
 
-  console.log(`
-${BOLD}Ready.${RESET} Each unit: open ${BOLD}Add Serial Unit${RESET} in Flex, then press Enter here.
-We Tab×${args.tabs} to Stencil and paste. After ADD, Flex returns to the top — repeat.
+  if (args.withSerial) {
+    console.log(`
+${BOLD}Ready.${RESET} Each unit: open Add Serial Unit, type Serial, Enter here.
 `);
+  } else {
+    console.log(`
+${BOLD}Ready.${RESET} Open ${BOLD}Add Serial Unit${RESET} once, then press Enter here ${BOLD}once${RESET}.
+We will add all ${stencils.length} stencils automatically (Tab×${args.tabs} each time).
+Leave Flex alone until it finishes — don’t click the terminal mid-run.
+`);
+  }
+
+  // Stencil-only: one start signal, then continuous
+  if (!args.withSerial) {
+    showStatus({
+      ...base(),
+      phase: "Open Add Serial Unit, then Enter here to start the batch",
+    });
+    await rl.question(
+      `${YELLOW}▸${RESET} Open ${BOLD}Add Serial Unit${RESET}, press ${BOLD}Enter${RESET} to start batch… `
+    );
+  }
 
   for (const [i, stencil] of stencils.entries()) {
     const next = stencils[i + 1] || null;
+    const isFirst = i === 0;
 
-    showStatus({
-      ...base(),
-      current: stencil,
-      next,
-      phase: args.withSerial
-        ? "Open Add Serial Unit, type Serial, Enter here"
-        : "Open Add Serial Unit, then Enter here",
-    });
-
-    const prompt = args.withSerial
-      ? `${YELLOW}▸${RESET} Open ${BOLD}Add Serial Unit${RESET}, type Serial, press ${BOLD}Enter${RESET} for ${BOLD}${stencil}${RESET}… `
-      : `${YELLOW}▸${RESET} Open ${BOLD}Add Serial Unit${RESET}, then press ${BOLD}Enter${RESET} for ${BOLD}${stencil}${RESET}… `;
-    await rl.question(prompt);
+    if (args.withSerial) {
+      showStatus({
+        ...base(),
+        current: stencil,
+        next,
+        phase: "Open Add Serial Unit, type Serial, Enter here",
+      });
+      await rl.question(
+        `${YELLOW}▸${RESET} Open Add Serial Unit, type Serial, press ${BOLD}Enter${RESET} for ${BOLD}${stencil}${RESET}… `
+      );
+    } else {
+      showStatus({
+        ...base(),
+        current: stencil,
+        next,
+        phase: isFirst
+          ? `Starting batch → ${stencil}`
+          : `Auto-continuing → ${stencil}`,
+      });
+      // Tiny pause so status can render; stay off the keyboard
+      await sleep(150);
+    }
 
     process.stdout.write(
-      `${YELLOW}→${RESET} Activating ${flexApp}, Tab×${args.tabs} → paste ${BOLD}${stencil}${RESET}…\n`
+      `${YELLOW}→${RESET} [${i + 1}/${stencils.length}] Tab×${args.tabs} → ${BOLD}${stencil}${RESET}…\n`
     );
 
     try {
       await fillStencilAndSubmit(stencil, {
         tabs: args.tabs,
         flexApp,
-        refocus: args.refocus,
+        // First keystroke (or after serial wait): activate browser.
+        // Later auto items: stay in Flex (refocus false) so we don't fight focus.
+        refocus: args.refocus && (args.withSerial || isFirst),
         refocusDelayMs: args.refocusDelayMs,
-        delayMs: 120,
+        delayMs: 150,
+        tabDelayMs: 220,
       });
     } catch (err) {
       showStatus({
@@ -289,7 +346,9 @@ We Tab×${args.tabs} to Stencil and paste. After ADD, Flex returns to the top �
       phase:
         done === stencils.length
           ? "Done"
-          : "Added — open Add Serial Unit again for next",
+          : args.withSerial
+            ? "Added — next unit when ready"
+            : `Added — waiting ${args.delay}ms for form reset…`,
       recent: [...recent],
     });
 
@@ -340,16 +399,22 @@ async function main() {
     process.exit(0);
   }
 
-  const wantsWizard =
-    argv.length === 0 ||
-    (args.name == null &&
-      args.count == null &&
-      args.last == null &&
-      !args.dryRun);
-
   const rl = readline.createInterface({ input, output });
 
   try {
+    if (args.calibrate) {
+      const flexApp = await resolveFlexApp(args, rl);
+      await runCalibrate(rl, { flexApp });
+      return;
+    }
+
+    const wantsWizard =
+      argv.length === 0 ||
+      (args.name == null &&
+        args.count == null &&
+        args.last == null &&
+        !args.dryRun);
+
     if (wantsWizard) {
       args = await runWizard(rl, args);
     } else if (args.name == null || args.count == null || args.last == null) {
@@ -359,6 +424,7 @@ async function main() {
       process.exit(1);
     }
 
+    args.tabs = resolveTabs(args);
     if (!Number.isInteger(args.tabs) || args.tabs < 0) {
       console.error("--tabs must be a non-negative integer");
       process.exit(1);
@@ -383,19 +449,22 @@ async function main() {
     if (args.dryRun) {
       const app = args.flexApp || "(your browser)";
       console.log(
-        `Will fill ${stencils.length} stencils: ${stencils[0]} … ${stencils.at(-1)}`
+        `Mode: ${args.withSerial ? "with-serial" : "stencil-only auto batch"}`
       );
-      for (const [i, stencil] of stencils.entries()) {
-        const steps = [
-          "Enter here",
-          args.refocus !== false ? `activate ${app}` : null,
-          args.tabs > 0 ? `Tab×${args.tabs}` : null,
-          `paste "${stencil}"`,
-          "Enter",
-        ]
-          .filter(Boolean)
-          .join(" → ");
-        console.log(`${i + 1}. ${steps}`);
+      console.log(
+        `Will fill ${stencils.length} stencils: ${stencils[0]} … ${stencils.at(-1)} (Tab×${args.tabs})`
+      );
+      if (!args.withSerial) {
+        console.log(
+          `1. Enter once → activate ${app} → then for each: Tab×${args.tabs} → paste → Enter → wait`
+        );
+        stencils.forEach((s, i) => console.log(`   ${i + 1}. ${s}`));
+      } else {
+        stencils.forEach((s, i) => {
+          console.log(
+            `${i + 1}. Enter here → activate ${app} → Tab×${args.tabs} → paste "${s}" → Enter`
+          );
+        });
       }
       console.log("Dry run complete (nothing typed).");
       return;
