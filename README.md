@@ -91,19 +91,15 @@ On macOS: System Settings → Privacy & Security → Accessibility — allow Ter
 
 ### Stencil only (default)
 
-1. Focus starts on Serial Number.
-2. Tool Tabs ×3 → Stencil (Barcode → RFID → Stencil).
-3. Types next stencil (e.g. `USB Drive - 041`) → Enter (ADD).
-4. Modal stays open; focus back on Serial → repeat until count is done.
+1. Open **Add Serial Unit** (cursor at top).
+2. Press Enter here → we activate browser, Tab×3 → Stencil, paste, ADD.
+3. Flex returns to the top — open Add Serial Unit again for the next unit.
 
 ### With serial (`--with-serial`)
 
-1. You type the **Serial Number** in Flex.
-2. Press **Enter in the CLI** (not in Flex) to continue.
-3. Tool Tabs to Stencil, types the next stencil, submits.
-4. Waits for you to type the next serial — rinse and repeat.
-
-If you click Stencil yourself after entering the serial, use `--tabs 0`.
+1. Open **Add Serial Unit**, type **Serial Number** at the top.
+2. Press Enter here → Tab×3 → Stencil → paste → ADD.
+3. Repeat for the next unit.
 
 ## CLI
 
@@ -112,12 +108,12 @@ If you click Stencil yourself after entering the serial, use `--tabs 0`.
 | `--name` / `-n` | Stencil name (`"USB Drive"` → `USB Drive - 041`) |
 | `--count` / `-c` | How many to add |
 | `--last` / `-l` | Last stencil number already used (next is `last + 1`) |
-| `--with-serial` | Wait for OP serial, then continue on Enter in the terminal |
-| `--tabs` | Tabs from Serial → Stencil (default `3`; use `0` if you focus Stencil) |
+| `--with-serial` | You type Serial at the top first each time |
+| `--app` | Browser app name (e.g. `Zen`) |
+| `--tabs` | Tabs from top → Stencil (default `3`) |
 | `--pad` | Zero-pad width (default `3` → `022`) |
 | `--sep` | Separator (default `" - "`) |
-| `--delay` | ms after each ADD (default `400`) |
-| `--countdown` | seconds before first keystroke in auto mode (default `5`) |
+| `--delay` | ms after each ADD (default `500`) |
 | `--dry-run` | Print the plan only |
 
 ```bash
