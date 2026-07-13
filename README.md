@@ -18,30 +18,23 @@ Working title — rename anytime.
 
 ```bash
 /flexac
+# or
+/flexac -n "USB Drive" -c 5 -l 41 --app Zen
 ```
 
-### If Tabbing messed up Flex / browser tabs
+### Workflow (each unit)
 
-That usually means keystrokes hit the wrong place. The tool now:
+After ADD, Flex jumps focus back to the **top** of the form. So for every unit:
 
-1. Waits for **Enter in the terminal** (you click **Stencil** in Flex first)
-2. **Cmd+Tab** back to Flex
-3. **Pastes** the stencil (no Tabbing by default) and presses Enter
+1. Click **Add Serial Unit** in Flex (cursor starts at Serial Number)
+2. Press **Enter** in the terminal
+3. We activate **Zen** (or your browser), **Tab×3** to Stencil, paste, ADD
 
-Recommended flow:
+Repeat until the count is done. You don’t click Stencil yourself — we tab there from the top every time.
 
-1. Open Add Serial Unit  
-2. Click the **Stencil** field  
-3. In the walkthrough, choose focus option **1) Stencil field**  
-4. When prompted, press Enter here  
-
-Use `--tabs 3` only if you want to start on Serial Number again.
+With `--with-serial`: open Add Serial Unit, type the serial at the top, then Enter here.
 
 After a run it asks whether Flex looked correct before saving the next “last number”.
-
-```bash
-/flexac -n "USB Drive" -c 1 -l 41
-```
 
 Open a **new** terminal tab after install so `.zshenv` picks up the functions. Or run `source ~/.zshenv`.
 

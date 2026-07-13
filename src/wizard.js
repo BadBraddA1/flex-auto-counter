@@ -12,6 +12,9 @@ import { loadLastRun } from "./state.js";
 import { buildCounterValues } from "./serials.js";
 import { detectFlexApps } from "./keyboard.js";
 
+/** Serial → Barcode → RFID → Stencil */
+const DEFAULT_TABS_TO_STENCIL = 3;
+
 async function ask(rl, label, { defaultValue, validate } = {}) {
   const hint =
     defaultValue !== undefined && String(defaultValue) !== ""
@@ -49,7 +52,7 @@ async function askFlexApp(rl, savedApp) {
   }
 
   console.log(`
-${BOLD}Which app is Flex in?${RESET}  ${DIM}(we activate this by name — Cmd+Tab is unreliable)${RESET}
+${BOLD}Which app is Flex in?${RESET}
 `);
 
   const choices = [];
@@ -59,7 +62,6 @@ ${BOLD}Which app is Flex in?${RESET}  ${DIM}(we activate this by name — Cmd+Ta
       choices.push(name);
     }
   }
-  // Always offer common browsers even if not detected yet
   for (const name of ["Zen", "Google Chrome", "Safari", "Arc", "Microsoft Edge", "Firefox"]) {
     if (!choices.some((c) => c.toLowerCase() === name.toLowerCase())) {
       choices.push(name);
@@ -74,9 +76,8 @@ ${BOLD}Which app is Flex in?${RESET}  ${DIM}(we activate this by name — Cmd+Ta
   });
   console.log(`  ${CYAN}${choices.length + 1}${RESET}) Type a custom app name`);
 
-  const defaultIdx = "1";
   const pick = await ask(rl, `Choose 1–${choices.length + 1}`, {
-    defaultValue: defaultIdx,
+    defaultValue: "1",
     validate: (v) => {
       const n = Number(v);
       if (!Number.isInteger(n) || n < 1 || n > choices.length + 1) {
@@ -89,7 +90,7 @@ ${BOLD}Which app is Flex in?${RESET}  ${DIM}(we activate this by name — Cmd+Ta
   const n = Number(pick);
   if (n === choices.length + 1) {
     return ask(rl, "App name exactly as in the menu bar", {
-      defaultValue: savedApp || "Google Chrome",
+      defaultValue: savedApp || "Zen",
     });
   }
   return choices[n - 1];
@@ -116,14 +117,6 @@ export async function runWizard(rl, defaults = {}) {
         ? String(saved.count)
         : "10";
   const modeDefault = defaults.withSerial ? "2" : saved.withSerial ? "2" : "1";
-  const focusDefault =
-    defaults.tabs === 0
-      ? "1"
-      : saved.tabs === 0
-        ? "1"
-        : defaults.tabs != null
-          ? "2"
-          : "1";
 
   console.log(
     `${BOLD}Setup${RESET}  ${DIM}(Enter keeps the value in [brackets])${RESET}\n`
@@ -146,21 +139,11 @@ export async function runWizard(rl, defaults = {}) {
 
   console.log(`
 ${BOLD}Mode${RESET}
-  ${CYAN}1${RESET}) Stencil only — fill Stencil + ADD (most jobs)
-  ${CYAN}2${RESET}) With serial — you type Serial, Enter here to continue
+  ${CYAN}1${RESET}) Stencil only — we Tab to Stencil + ADD (most jobs)
+  ${CYAN}2${RESET}) With serial — you type Serial first, then we Tab to Stencil
 `);
   const modeRaw = await ask(rl, "Choose mode 1 or 2", {
     defaultValue: modeDefault,
-    validate: (v) => (v === "1" || v === "2" ? null : "Enter 1 or 2"),
-  });
-
-  console.log(`
-${BOLD}Where should the cursor be in Flex?${RESET}
-  ${CYAN}1${RESET}) ${BOLD}Stencil field${RESET}  ← recommended (no Tabbing)
-  ${CYAN}2${RESET}) Serial Number field (tool Tabs ×3 to Stencil)
-`);
-  const focusRaw = await ask(rl, "Choose focus 1 or 2", {
-    defaultValue: focusDefault,
     validate: (v) => (v === "1" || v === "2" ? null : "Enter 1 or 2"),
   });
 
@@ -171,7 +154,7 @@ ${BOLD}Where should the cursor be in Flex?${RESET}
   const last = Number(lastRaw);
   const count = Number(countRaw);
   const withSerial = modeRaw === "2";
-  const tabs = focusRaw === "1" ? 0 : 3;
+  const tabs = defaults.tabs ?? DEFAULT_TABS_TO_STENCIL;
   const pad = defaults.pad ?? 3;
   const separator = defaults.separator ?? " - ";
   const delay = defaults.delay ?? 500;
@@ -185,11 +168,11 @@ ${BOLD}${GREEN}Plan${RESET}
   Last:    ${stencils.at(-1)}
   Total:   ${stencils.length}
   Mode:    ${withSerial ? "with serial" : "stencil only"}
-  Focus:   ${tabs === 0 ? "Stencil (paste, no Tab)" : "Serial → Tab×3 → Stencil"}
+  Path:    Open Add Serial Unit → Tab×${tabs} → Stencil → paste → Enter
   Browser: ${flexApp}
 `);
 
-  printPrepChecklist(withSerial, tabs === 0, flexApp);
+  printPrepChecklist(withSerial, flexApp, tabs);
 
   const go = await ask(rl, "Ready to run? (y/n)", {
     defaultValue: "y",

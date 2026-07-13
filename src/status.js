@@ -76,31 +76,22 @@ ${BOLD}${CYAN}╔═════════════════════
 `);
 }
 
-export function printPrepChecklist(withSerial, stencilDirect = true, flexApp = "your browser") {
-  console.log(`${BOLD}Before we start${RESET}`);
-  console.log(`  1. Open Flex in ${BOLD}${flexApp}${RESET} → Add Serial Unit`);
+export function printPrepChecklist(withSerial, flexApp = "your browser", tabs = 3) {
+  console.log(`${BOLD}Your job each unit${RESET}`);
+  console.log(`  1. In ${BOLD}${flexApp}${RESET}, click ${BOLD}Add Serial Unit${RESET}`);
   console.log(`  2. Leave ${BOLD}Enter key mapped to ADD${RESET} checked`);
   if (withSerial) {
-    console.log(`  3. Click ${BOLD}Serial Number${RESET}, type the serial`);
-    if (stencilDirect) {
-      console.log(`  4. Click ${BOLD}Stencil${RESET}, then press Enter ${BOLD}here${RESET}`);
-    } else {
-      console.log(
-        `  4. Leave focus on Serial, then press Enter ${BOLD}here${RESET}`
-      );
-    }
-  } else if (stencilDirect) {
-    console.log(`  3. Click into the ${BOLD}Stencil${RESET} field`);
-    console.log(
-      `  4. Press Enter ${BOLD}here${RESET} — we activate ${flexApp} and paste`
-    );
+    console.log(`  3. Type the ${BOLD}Serial Number${RESET} (cursor starts at the top)`);
+    console.log(`  4. Press Enter ${BOLD}here${RESET} — we Tab×${tabs} to Stencil, paste, ADD`);
   } else {
-    console.log(`  3. Click ${BOLD}Serial Number${RESET}`);
     console.log(
-      `  4. Press Enter ${BOLD}here${RESET} — we activate ${flexApp}, Tab to Stencil, paste`
+      `  3. Press Enter ${BOLD}here${RESET} — we Tab×${tabs} to Stencil, paste, ADD`
     );
   }
-  console.log("");
+  console.log(`
+${DIM}After ADD, Flex jumps back to the top. For the next unit, open Add Serial Unit
+again (or leave it open if it stayed open) and press Enter here — we re-Tab.${RESET}
+`);
 }
 
 export { RESET, BOLD, DIM, CYAN, GREEN, YELLOW, RED };

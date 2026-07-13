@@ -17,7 +17,8 @@ import { saveLastRun, loadLastRun } from "./state.js";
 
 const DEFAULT_PAD = 3;
 const DEFAULT_SEP = " - ";
-const DEFAULT_TABS = 0;
+/** Serial → Barcode → RFID → Stencil (Flex resets to top after each ADD) */
+const DEFAULT_TABS = 3;
 
 function printHelp() {
   console.log(`
@@ -26,27 +27,25 @@ Flex Auto Counter — auto-fill incrementing Stencil values in Add Serial Unit.
 Stencil format:  "USB Drive - 022"
 
 Usage:
-  /flexac                         Interactive walkthrough + live status
-  /flexac --name <n> --count <n> --last <n> --app "Google Chrome"
+  /flexac
+  /flexac --name <n> --count <n> --last <n> --app Zen
 
-How focus works:
-  We activate your browser by name (not Cmd+Tab). Pick it in the wizard
-  or pass --app "Google Chrome".
-
-  1. Click the Stencil field in Flex
+Workflow (each unit):
+  1. Click Add Serial Unit in Flex (cursor starts at the top)
   2. Press Enter in this terminal
-  3. We bring the browser forward, paste, press Enter (ADD)
+  3. We activate your browser, Tab×${DEFAULT_TABS} to Stencil, paste, ADD
+  After ADD, Flex jumps back to the top — open Add Serial Unit again for the next one.
 
 Options:
-  --app <name>    Browser/app Flex runs in (e.g. "Google Chrome", "Safari", "Arc")
-  --tabs <n>      Tabs before paste (default: 0 = click Stencil yourself)
-  --no-refocus    Do not activate the browser (Flex must already be frontmost)
+  --app <name>    Browser (e.g. Zen, Google Chrome)
+  --tabs <n>      Tabs from top to Stencil (default: ${DEFAULT_TABS})
+  --no-refocus    Do not activate the browser
   --pad <n>       Zero-pad width (default: ${DEFAULT_PAD})
   --sep <s>       Separator (default: " - ")
   --delay <ms>    Pause after each ADD (default: 500)
   --refocus-delay <ms>  Wait after activating browser (default: 600)
-  --with-serial   Wait for you to type Serial each time
-  --dry-run       Print the plan only
+  --with-serial   You type Serial at the top first each time
+  --dry-run
   --help, -h
 `);
 }
@@ -209,16 +208,12 @@ async function runSession(args, stencils, rl) {
   const modeLabel = args.withSerial
     ? "with serial (wait for you)"
     : "stencil only";
-  const focusHint =
-    args.tabs === 0
-      ? "click Stencil in Flex"
-      : "click Serial (Tab×" + args.tabs + ")";
   const recent = [];
   let done = 0;
 
   const base = () => ({
     name: args.name,
-    mode: `${modeLabel} · ${flexApp}`,
+    mode: `${modeLabel} · ${flexApp} · Tab×${args.tabs}`,
     total: stencils.length,
     done,
     current: null,
@@ -228,7 +223,8 @@ async function runSession(args, stencils, rl) {
   });
 
   console.log(`
-${BOLD}Ready.${RESET} Click ${args.tabs === 0 ? "Stencil" : "Serial Number"} in Flex, then come back here.
+${BOLD}Ready.${RESET} Each unit: open ${BOLD}Add Serial Unit${RESET} in Flex, then press Enter here.
+We Tab×${args.tabs} to Stencil and paste. After ADD, Flex returns to the top — repeat.
 `);
 
   for (const [i, stencil] of stencils.entries()) {
@@ -239,16 +235,17 @@ ${BOLD}Ready.${RESET} Click ${args.tabs === 0 ? "Stencil" : "Serial Number"} in 
       current: stencil,
       next,
       phase: args.withSerial
-        ? `Type Serial${args.tabs === 0 ? ", click Stencil" : ""}, Enter here`
-        : `Click field in Flex, then Enter here → ${stencil}`,
+        ? "Open Add Serial Unit, type Serial, Enter here"
+        : "Open Add Serial Unit, then Enter here",
     });
 
-    await rl.question(
-      `${YELLOW}▸${RESET} ${focusHint}, then press ${BOLD}Enter${RESET} to activate ${BOLD}${flexApp}${RESET} + paste ${BOLD}${stencil}${RESET}… `
-    );
+    const prompt = args.withSerial
+      ? `${YELLOW}▸${RESET} Open ${BOLD}Add Serial Unit${RESET}, type Serial, press ${BOLD}Enter${RESET} for ${BOLD}${stencil}${RESET}… `
+      : `${YELLOW}▸${RESET} Open ${BOLD}Add Serial Unit${RESET}, then press ${BOLD}Enter${RESET} for ${BOLD}${stencil}${RESET}… `;
+    await rl.question(prompt);
 
     process.stdout.write(
-      `${YELLOW}→${RESET} Activating ${flexApp}, pasting ${BOLD}${stencil}${RESET}…\n`
+      `${YELLOW}→${RESET} Activating ${flexApp}, Tab×${args.tabs} → paste ${BOLD}${stencil}${RESET}…\n`
     );
 
     try {
@@ -289,7 +286,10 @@ ${BOLD}Ready.${RESET} Click ${args.tabs === 0 ? "Stencil" : "Serial Number"} in 
       ...base(),
       current: stencil,
       next: stencils[done] || null,
-      phase: done === stencils.length ? "Done" : "Added — ready for next",
+      phase:
+        done === stencils.length
+          ? "Done"
+          : "Added — open Add Serial Unit again for next",
       recent: [...recent],
     });
 
