@@ -6,6 +6,29 @@ Serial Number is usually left alone. If you need a serial on each unit, use `--w
 
 Working title — rename anytime.
 
+## Terminal command: `/flexac`
+
+On this machine the CLI is available as **`flexac`** and **`/flexac`** (same pattern as `/scrap` / `/paste-env`).
+
+```bash
+/flexac -n CAM -c 10 -l 100
+/flexac -n CAM -c 10 -l 100 --with-serial
+/flexac --help
+```
+
+Open a **new** terminal tab after install so `.zshenv` picks up the functions. Or run `source ~/.zshenv`.
+
+### Install on another Mac
+
+```bash
+git clone https://github.com/BadBraddA1/flex-auto-counter.git ~/flex-auto-counter
+~/flex-auto-counter/bin/install-shell.sh
+# new tab, then:
+/flexac --help
+```
+
+Override checkout path with `FLEX_AUTO_COUNTER_HOME` if you keep the repo elsewhere (home wrapper only).
+
 ## Quick start
 
 ```bash

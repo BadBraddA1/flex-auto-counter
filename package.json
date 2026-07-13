@@ -4,7 +4,8 @@
   "description": "CLI that auto-fills incrementing Stencil values in Flex Add Serial Unit, with optional wait-for-serial mode.",
   "type": "module",
   "bin": {
-    "flex-auto-counter": "./src/cli.js"
+    "flex-auto-counter": "./src/cli.js",
+    "flexac": "./src/cli.js"
   },
   "scripts": {
     "start": "node src/cli.js",

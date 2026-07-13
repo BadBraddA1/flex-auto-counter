@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# flexac — Flex Auto Counter (stencil counter for Add Serial Unit)
+#
+# Installed as ~/.local/bin/flexac; shell functions flexac and /flexac
+# are added by bin/install-shell.sh (same pattern as /scrap).
+set -euo pipefail
+
+resolve_root() {
+  local source="${BASH_SOURCE[0]}"
+  while [[ -L "$source" ]]; do
+    local dir
+    dir="$(cd -P "$(dirname "$source")" && pwd)"
+    source="$(readlink "$source")"
+    [[ "$source" != /* ]] && source="$dir/$source"
+  done
+  cd -P "$(dirname "$source")/.." && pwd
+}
+
+if [[ -n "${FLEX_AUTO_COUNTER_HOME:-}" && -f "${FLEX_AUTO_COUNTER_HOME}/src/cli.js" ]]; then
+  ROOT="$FLEX_AUTO_COUNTER_HOME"
+else
+  ROOT="$(resolve_root)"
+fi
+
+CLI="$ROOT/src/cli.js"
+
+if [[ ! -f "$CLI" ]]; then
+  echo "flexac: missing $CLI" >&2
+  echo "Clone flex-auto-counter or set FLEX_AUTO_COUNTER_HOME." >&2
+  exit 1
+fi
+
+exec node "$CLI" "$@"
