@@ -1,0 +1,26 @@
+{
+  "name": "flex-auto-counter",
+  "version": "0.1.0",
+  "description": "CLI that types incrementing serial numbers into Flex's Add Serial Unit form and hits Enter for each.",
+  "type": "module",
+  "bin": {
+    "flex-auto-counter": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js",
+    "test": "node --test test/*.test.js",
+    "demo": "node src/cli.js --dry-run --name UNIT --count 5 --last 100",
+    "test-form": "node src/serve-test-form.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "flex",
+    "serial",
+    "counter",
+    "automation",
+    "cli"
+  ],
+  "license": "MIT"
+}

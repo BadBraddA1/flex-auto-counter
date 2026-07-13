@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Add Serial Unit — Flex Auto Counter test</title>
+    <style>
+      :root {
+        --bg: #e8eef4;
+        --panel: #fff;
+        --border: #c5d0db;
+        --accent: #1a6fb5;
+        --muted: #5a6b7a;
+        --info: #e8f2fb;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", Tahoma, sans-serif;
+        background: var(--bg);
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+      .modal {
+        width: min(420px, 100%);
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        box-shadow: 0 8px 28px rgba(20, 40, 60, 0.18);
+      }
+      .titlebar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        font-weight: 600;
+      }
+      .titlebar button {
+        border: 0;
+        background: transparent;
+        font-size: 18px;
+        cursor: pointer;
+        color: var(--muted);
+      }
+      .info {
+        margin: 12px 14px;
+        padding: 10px 12px;
+        background: var(--info);
+        border: 1px solid #b7d4ef;
+        border-radius: 3px;
+        font-size: 13px;
+        color: #244a66;
+        line-height: 1.4;
+      }
+      form {
+        padding: 0 14px 14px;
+        display: grid;
+        gap: 10px;
+      }
+      label {
+        display: grid;
+        gap: 4px;
+        font-size: 13px;
+        color: #222;
+      }
+      label .req {
+        color: #c0392b;
+      }
+      input,
+      select {
+        height: 32px;
+        padding: 0 8px;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        font: inherit;
+      }
+      input:focus,
+      select:focus {
+        outline: 2px solid #7eb6e8;
+        outline-offset: 0;
+      }
+      .footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        border-top: 1px solid var(--border);
+        background: #f7f9fb;
+      }
+      .footer label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+      }
+      .actions button {
+        height: 32px;
+        padding: 0 16px;
+        border-radius: 3px;
+        font: inherit;
+        cursor: pointer;
+      }
+      .cancel {
+        background: #fff;
+        border: 1px solid var(--accent);
+        color: var(--accent);
+      }
+      .add {
+        background: var(--accent);
+        border: 1px solid var(--accent);
+        color: #fff;
+      }
+      .log {
+        margin-top: 16px;
+        width: min(420px, 100%);
+        background: #111827;
+        color: #d1fae5;
+        border-radius: 4px;
+        padding: 12px;
+        font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+        min-height: 120px;
+        max-height: 220px;
+        overflow: auto;
+      }
+      .hint {
+        width: min(420px, 100%);
+        margin-top: 12px;
+        font-size: 13px;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+      .wrap {
+        width: min(420px, 100%);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="modal" role="dialog" aria-label="Add Serial Unit">
+        <div class="titlebar">
+          <span>Add Serial Unit</span>
+          <button type="button" aria-label="Close">×</button>
+        </div>
+        <div class="info">
+          The Add Serial Unit popup will remain open after adding a new unit.
+          This allows you to easily add multiple units in a row. Click the X in
+          the top-right corner or Cancel when you are finished.
+        </div>
+        <form id="unit-form">
+          <label>
+            Serial Number
+            <input id="serial" name="serial" type="text" autocomplete="off" />
+          </label>
+          <label>
+            Barcode
+            <input name="barcode" type="text" />
+          </label>
+          <label>
+            RFID Tag
+            <input name="rfid" type="text" />
+          </label>
+          <label>
+            Stencil
+            <input name="stencil" type="text" />
+          </label>
+          <label>
+            Model Number
+            <input name="model" type="text" />
+          </label>
+          <label>
+            Location <span class="req">*</span>
+            <select name="location">
+              <option selected>St Louis</option>
+            </select>
+          </label>
+          <label>
+            Resource Type <span class="req">*</span>
+            <select name="resourceType">
+              <option selected>Rental</option>
+            </select>
+          </label>
+          <label>
+            Purchase Order
+            <input name="po" type="text" />
+          </label>
+          <label>
+            Purchase Date
+            <input name="purchaseDate" type="text" placeholder="MM/DD/YYYY" />
+          </label>
+          <label>
+            Purchase Cost
+            <input name="cost" type="text" value="0" />
+          </label>
+          <label>
+            Quantity <span class="req">*</span>
+            <input name="qty" type="text" value="1" />
+          </label>
+        </form>
+        <div class="footer">
+          <label>
+            <input id="enter-maps-add" type="checkbox" checked />
+            Enter key mapped to ADD button
+          </label>
+          <div class="actions">
+            <button class="cancel" type="button">Cancel</button>
+            <button class="add" id="add-btn" type="button">ADD</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="hint">
+        Practice mode: click <strong>Serial Number</strong>, then run
+        <code>npx flex-auto-counter -n CAM -c 5 -l 100</code> (or
+        <code>npm start -- …</code>). Enter submits when the checkbox is on.
+      </p>
+      <div class="log" id="log">Added units will appear here…</div>
+    </div>
+
+    <script>
+      const form = document.getElementById("unit-form");
+      const serial = document.getElementById("serial");
+      const log = document.getElementById("log");
+      const addBtn = document.getElementById("add-btn");
+      const enterMapsAdd = document.getElementById("enter-maps-add");
+      let added = 0;
+
+      function addUnit() {
+        const value = serial.value.trim();
+        if (!value) {
+          log.textContent = "Serial Number is empty — focus it and try again.";
+          return;
+        }
+        added += 1;
+        const line = `${added}. ADD → ${value}`;
+        if (log.textContent.startsWith("Added units") || log.textContent.startsWith("Serial Number")) {
+          log.textContent = line;
+        } else {
+          log.textContent += "\n" + line;
+        }
+        log.scrollTop = log.scrollHeight;
+        serial.value = "";
+        serial.focus();
+      }
+
+      addBtn.addEventListener("click", addUnit);
+
+      form.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && enterMapsAdd.checked) {
+          event.preventDefault();
+          addUnit();
+        }
+      });
+
+      serial.focus();
+    </script>
+  </body>
+</html>
