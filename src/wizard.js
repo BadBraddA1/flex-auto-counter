@@ -60,7 +60,7 @@ ${BOLD}Which app is Flex in?${RESET}  ${DIM}(we activate this by name — Cmd+Ta
     }
   }
   // Always offer common browsers even if not detected yet
-  for (const name of ["Google Chrome", "Safari", "Arc", "Microsoft Edge", "Firefox"]) {
+  for (const name of ["Zen", "Google Chrome", "Safari", "Arc", "Microsoft Edge", "Firefox"]) {
     if (!choices.some((c) => c.toLowerCase() === name.toLowerCase())) {
       choices.push(name);
     }

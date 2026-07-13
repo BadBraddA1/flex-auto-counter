@@ -5,6 +5,8 @@ const execFileAsync = promisify(execFile);
 
 /** Common browsers / shells Flex might run in */
 export const KNOWN_FLEX_APPS = [
+  "Zen",
+  "zen",
   "Google Chrome",
   "Chrome",
   "Safari",
@@ -63,8 +65,34 @@ export async function listRunningAppNames() {
 /** Running apps that look like a browser Flex would use. */
 export async function detectFlexApps() {
   const running = await listRunningAppNames();
-  const lower = new Set(running.map((n) => n.toLowerCase()));
-  return KNOWN_FLEX_APPS.filter((name) => lower.has(name.toLowerCase()));
+  const lowerToActual = new Map(
+    running.map((n) => [n.toLowerCase(), n])
+  );
+  const found = [];
+  for (const name of KNOWN_FLEX_APPS) {
+    const actual = lowerToActual.get(name.toLowerCase());
+    if (actual && !found.some((f) => f.toLowerCase() === actual.toLowerCase())) {
+      found.push(actual);
+    }
+  }
+  return found;
+}
+
+/**
+ * Resolve a user-facing app name to the real process name (case-insensitive).
+ * Zen Browser’s process is "zen"; the app is "Zen".
+ */
+export async function resolveProcessName(appName) {
+  const running = await listRunningAppNames();
+  const want = String(appName || "").trim().toLowerCase();
+  const hit = running.find((n) => n.toLowerCase() === want);
+  if (hit) return hit;
+  // Zen.app sometimes shows as Zen in the menu bar but process "zen"
+  if (want === "zen browser") {
+    const zen = running.find((n) => n.toLowerCase() === "zen");
+    if (zen) return zen;
+  }
+  return appName;
 }
 
 const TERMINAL_APP_RE =
@@ -78,8 +106,12 @@ export function looksLikeTerminalApp(name) {
  * Bring an app to the front by process name (reliable; Cmd+Tab simulation is not).
  */
 export async function activateApp(appName) {
-  const safe = escapeAppleScriptString(appName);
-  // Prefer System Events frontmost — works even when "tell application" is flaky
+  const processName = await resolveProcessName(appName);
+  const safe = escapeAppleScriptString(processName);
+  const safeApp = escapeAppleScriptString(
+    processName.toLowerCase() === "zen" ? "Zen" : processName
+  );
+
   try {
     await runAppleScript(`
       tell application "System Events"
@@ -91,7 +123,7 @@ export async function activateApp(appName) {
       end tell
     `);
   } catch {
-    await runAppleScript(`tell application "${safe}" to activate`);
+    await runAppleScript(`tell application "${safeApp}" to activate`);
   }
 }
 

@@ -170,9 +170,9 @@ async function resolveFlexApp(args, rl) {
   }
 
   const typed = await rl.question(
-    `${CYAN}?${RESET} App name (e.g. Google Chrome) [Google Chrome]: `
+    `${CYAN}?${RESET} App name (e.g. Zen, Google Chrome) [Zen]: `
   );
-  return typed.trim() || "Google Chrome";
+  return typed.trim() || "Zen";
 }
 
 async function smokeTestActivate(flexApp) {
