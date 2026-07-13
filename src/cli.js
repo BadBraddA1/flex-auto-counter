@@ -4,6 +4,9 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { buildCounterValues } from "./serials.js";
 import { tabTypeAndEnter, sleep } from "./keyboard.js";
+import { runWizard } from "./wizard.js";
+import { renderStatus, BOLD, GREEN, YELLOW, RED, RESET } from "./status.js";
+import { saveLastRun } from "./state.js";
 
 /** Serial → Barcode → RFID → Stencil */
 const DEFAULT_TABS_TO_STENCIL = 3;
@@ -19,48 +22,31 @@ Stencil format (matches Flex lists):
   "<name> - <zero-padded number>"  →  e.g. USB Drive - 022, USB Drive - 023
 
 Usage:
-  /flexac --name <prefix> --count <n> --last <n> [options]
+  /flexac                         Interactive walkthrough + live status
+  /flexac --name <n> --count <n> --last <n> [options]
 
-Required:
+Required (flag mode):
   --name, -n      Stencil name/prefix (e.g. "USB Drive")
   --count, -c     How many units to add
   --last, -l      Last stencil number already used (next starts at last + 1)
 
 Modes:
   (default)       Auto: tab to Stencil → type next value → Enter → repeat
-  --with-serial   Interactive: you type Serial Number, press Enter in this
-                  terminal to continue; tool fills Stencil and submits; then
-                  waits for Serial again (rinse / repeat)
+  --with-serial   You type Serial Number; press Enter in this terminal to continue
 
 Options:
   --pad <n>       Zero-pad width (default: ${DEFAULT_PAD} → 022)
   --sep <s>       Between name and number (default: " - ")
   --tabs <n>      Tabs from Serial Number to Stencil (default: ${DEFAULT_TABS_TO_STENCIL})
-                  Use --tabs 0 if you click Stencil yourself before each continue
   --delay <ms>    Pause after each ADD (default: 400)
   --countdown <s> Seconds before first keystroke in auto mode (default: 5)
   --dry-run       Print the plan; no keyboard
   --help, -h      Show this help
 
 Examples:
-  # Last stencil was USB Drive - 040; add the next 10 → 041 … 050
+  /flexac
   /flexac -n "USB Drive" -c 10 -l 40
-  /flexac -n "USB Drive" -c 10 -l 40 --dry-run
-
-  # Operator types each serial, then continues for stencil + ADD
   /flexac -n "USB Drive" -c 10 -l 40 --with-serial
-
-Workflow (stencil only):
-  1. Open Flex → Add Serial Unit (leave "Enter key mapped to ADD" checked)
-  2. Click Serial Number (tool will Tab ${DEFAULT_TABS_TO_STENCIL}× to Stencil)
-  3. Run the CLI — it types stencil → Enter → next stencil until done
-
-Workflow (--with-serial):
-  1. Same popup; click Serial Number
-  2. Run with --with-serial
-  3. Type the serial in Flex
-  4. Press Enter in this terminal → tool Tabs to Stencil, types next stencil, ADD
-  5. Modal stays open → type next serial → Enter here → repeat
 `);
 }
 
@@ -77,6 +63,7 @@ function parseArgs(argv) {
     withSerial: false,
     dryRun: false,
     help: false,
+    wizard: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -133,123 +120,188 @@ function parseArgs(argv) {
   return args;
 }
 
-async function countdown(seconds, message) {
-  if (seconds <= 0) return;
-  for (let s = seconds; s > 0; s--) {
-    process.stdout.write(`\r${message} starting in ${s}s   `);
-    await sleep(1000);
+function showStatus(state) {
+  if (process.stdout.isTTY) {
+    console.clear();
   }
-  process.stdout.write("\rStarting now.                                    \n");
+  console.log(renderStatus(state));
 }
 
-async function waitForContinue(rl, index, total, stencil) {
-  await rl.question(
-    `[${index}/${total}] Type Serial in Flex, then press Enter here for stencil ${stencil}… `
+async function countdown(seconds, onTick) {
+  if (seconds <= 0) return;
+  for (let s = seconds; s > 0; s--) {
+    onTick?.(s);
+    await sleep(1000);
+  }
+}
+
+async function runSession(args, stencils, rl) {
+  const modeLabel = args.withSerial
+    ? "with serial (wait for you)"
+    : "stencil only (auto)";
+  const recent = [];
+  let done = 0;
+
+  const base = () => ({
+    name: args.name,
+    mode: modeLabel,
+    total: stencils.length,
+    done,
+    current: null,
+    next: stencils[done] || null,
+    phase: "Starting",
+    recent: [...recent],
+  });
+
+  if (!args.withSerial) {
+    await countdown(args.countdown, (s) => {
+      showStatus({
+        ...base(),
+        phase: `Focus Serial Number in Flex — starting in ${s}s`,
+      });
+    });
+  } else {
+    showStatus({
+      ...base(),
+      phase: "Waiting — type Serial in Flex, then press Enter here",
+    });
+  }
+
+  for (const [i, stencil] of stencils.entries()) {
+    const next = stencils[i + 1] || null;
+
+    if (args.withSerial) {
+      showStatus({
+        ...base(),
+        current: stencil,
+        next,
+        phase: `Waiting for serial — then Enter here for ${stencil}`,
+      });
+      await rl.question(
+        `${YELLOW}▸${RESET} Serial typed in Flex? Press ${BOLD}Enter${RESET} to fill stencil + ADD… `
+      );
+    }
+
+    showStatus({
+      ...base(),
+      current: stencil,
+      next,
+      phase: `Typing stencil → ADD`,
+    });
+
+    try {
+      await tabTypeAndEnter(stencil, { tabs: args.tabs });
+    } catch (err) {
+      showStatus({
+        ...base(),
+        current: stencil,
+        next,
+        phase: `Error: ${err.message}`,
+      });
+      console.error(
+        `${RED}Stopped at ${stencil}.${RESET} On macOS: System Settings → Privacy & Security → Accessibility — allow Terminal/Cursor.`
+      );
+      process.exit(1);
+    }
+
+    done = i + 1;
+    recent.push(stencil);
+    showStatus({
+      ...base(),
+      current: stencil,
+      next: stencils[done] || null,
+      phase: done === stencils.length ? "Done" : "Added — continuing",
+      recent: [...recent],
+    });
+
+    if (i < stencils.length - 1) {
+      await sleep(args.delay);
+    }
+  }
+
+  saveLastRun({
+    name: args.name,
+    last: args.last + stencils.length,
+    count: args.count,
+    withSerial: args.withSerial,
+  });
+
+  console.log(
+    `${GREEN}${BOLD}Done.${RESET} Added ${stencils.length}. Next last number to use: ${BOLD}${args.last + stencils.length}${RESET}\n`
   );
 }
 
 async function main() {
+  const argv = process.argv.slice(2);
   let args;
   try {
-    args = parseArgs(process.argv.slice(2));
+    args = parseArgs(argv);
   } catch (err) {
     console.error(err.message);
     printHelp();
     process.exit(1);
   }
 
-  if (args.help || process.argv.length <= 2) {
+  if (args.help) {
     printHelp();
     process.exit(0);
   }
 
-  if (args.name == null || args.count == null || args.last == null) {
-    console.error("Missing required flags: --name, --count, --last");
-    printHelp();
-    process.exit(1);
-  }
+  const wantsWizard =
+    argv.length === 0 ||
+    (args.name == null && args.count == null && args.last == null && !args.dryRun);
 
-  if (!Number.isInteger(args.tabs) || args.tabs < 0) {
-    console.error("--tabs must be a non-negative integer");
-    process.exit(1);
-  }
-
-  let stencils;
-  try {
-    stencils = buildCounterValues({
-      name: args.name,
-      count: args.count,
-      last: args.last,
-      pad: args.pad,
-      separator: args.separator,
-    });
-  } catch (err) {
-    console.error(err.message);
-    process.exit(1);
-  }
-
-  const mode = args.withSerial ? "with-serial (wait for OP)" : "stencil-only (auto)";
-  console.log(
-    `Mode: ${mode}\nWill fill ${stencils.length} stencils: ${stencils[0]} … ${stencils.at(-1)} (tabs→Stencil: ${args.tabs})`
-  );
-
-  if (args.dryRun) {
-    for (const [i, stencil] of stencils.entries()) {
-      if (args.withSerial) {
-        console.log(
-          `${i + 1}. wait for OP serial → Enter in CLI → Tab×${args.tabs} → type "${stencil}" → Enter`
-        );
-      } else {
-        console.log(
-          `${i + 1}. Tab×${args.tabs} → type "${stencil}" → Enter`
-        );
-      }
-    }
-    console.log("Dry run complete (nothing typed).");
-    return;
-  }
-
-  const rl = args.withSerial
-    ? readline.createInterface({ input, output })
-    : null;
+  const rl = readline.createInterface({ input, output });
 
   try {
-    if (!args.withSerial) {
-      await countdown(
-        args.countdown,
-        "Focus Serial Number (or leave it focused)…"
-      );
-    } else {
-      console.log(
-        "Ready. For each unit: type Serial in Flex, then press Enter in this terminal."
-      );
+    if (wantsWizard) {
+      args = await runWizard(rl, args);
+    } else if (args.name == null || args.count == null || args.last == null) {
+      console.error("Missing required flags: --name, --count, --last");
+      console.error("Or run /flexac with no args for the walkthrough.");
+      printHelp();
+      process.exit(1);
     }
 
-    for (const [i, stencil] of stencils.entries()) {
-      if (args.withSerial) {
-        await waitForContinue(rl, i + 1, stencils.length, stencil);
-      } else {
-        process.stdout.write(`[${i + 1}/${stencils.length}] stencil ${stencil}\n`);
-      }
+    if (!Number.isInteger(args.tabs) || args.tabs < 0) {
+      console.error("--tabs must be a non-negative integer");
+      process.exit(1);
+    }
 
+    let stencils = args.stencils;
+    if (!stencils) {
       try {
-        await tabTypeAndEnter(stencil, { tabs: args.tabs });
+        stencils = buildCounterValues({
+          name: args.name,
+          count: args.count,
+          last: args.last,
+          pad: args.pad,
+          separator: args.separator,
+        });
       } catch (err) {
-        console.error(`\nStopped at ${stencil}: ${err.message}`);
-        console.error(
-          "On macOS: System Settings → Privacy & Security → Accessibility — allow Terminal/Cursor."
-        );
+        console.error(err.message);
         process.exit(1);
       }
-
-      if (i < stencils.length - 1) {
-        await sleep(args.delay);
-      }
     }
 
-    console.log("Done.");
+    if (args.dryRun) {
+      console.log(
+        `Will fill ${stencils.length} stencils: ${stencils[0]} … ${stencils.at(-1)}`
+      );
+      for (const [i, stencil] of stencils.entries()) {
+        console.log(
+          args.withSerial
+            ? `${i + 1}. wait for serial → Enter → Tab×${args.tabs} → "${stencil}" → Enter`
+            : `${i + 1}. Tab×${args.tabs} → "${stencil}" → Enter`
+        );
+      }
+      console.log("Dry run complete (nothing typed).");
+      return;
+    }
+
+    await runSession(args, stencils, rl);
   } finally {
-    rl?.close();
+    rl.close();
   }
 }
 

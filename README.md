@@ -16,14 +16,19 @@ Working title — rename anytime.
 
 ## Terminal command: `/flexac`
 
-On this machine the CLI is available as **`flexac`** and **`/flexac`** (same pattern as `/scrap` / `/paste-env`).
+On this machine the CLI is available as **`flexac`** and **`/flexac`**.
 
 ```bash
-# Last used was USB Drive - 040 → adds 041 … 050
+# Guided walkthrough + live status (recommended)
+/flexac
+
+# Or flags for scripting
 /flexac -n "USB Drive" -c 10 -l 40
 /flexac -n "USB Drive" -c 10 -l 40 --with-serial
 /flexac --help
 ```
+
+Running `/flexac` alone opens a terminal walkthrough: name → last number → count → mode → checklist → confirm. While it runs you get a status panel (progress bar, current/next stencil, recent ADDs). It remembers your last name/count/mode in `~/.config/flex-auto-counter/`.
 
 Open a **new** terminal tab after install so `.zshenv` picks up the functions. Or run `source ~/.zshenv`.
 
