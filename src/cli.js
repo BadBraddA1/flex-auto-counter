@@ -18,9 +18,9 @@ import { saveLastRun, loadLastRun } from "./state.js";
 
 const DEFAULT_PAD = 3;
 const DEFAULT_SEP = " - ";
-/** Fallback before calibration — run /flexac --calibrate to learn the real count */
-const DEFAULT_TABS = 3;
-/** Wait after ADD so Flex can reset focus to the top before the next Tab cycle */
+/** From top of Add Serial Unit to Stencil (Serial→Barcode→RFID→Stencil + 1) */
+const DEFAULT_TABS = 4;
+/** Wait after ADD so Flex can settle before the next paste */
 const DEFAULT_DELAY = 900;
 
 function printHelp() {
@@ -30,23 +30,24 @@ Flex Auto Counter — fill Stencil in Add Serial Unit (auto-count).
 Stencil format:  "USB Drive - 022"
 
 Usage:
-  /flexac                         Walkthrough
-  /flexac --calibrate --app Zen   Learn how many Tabs reach Stencil (do this first)
+  /flexac
+  /flexac --calibrate --app Zen
   /flexac -n "USB Drive" -c 10 -l 40 --app Zen
 
 Stencil-only (no serial):
   1. Open Add Serial Unit once
   2. Press Enter here once
-  3. We run the whole batch: Tab → paste → ADD → wait → Tab → … (no more Enter)
+  3. We Tab×${DEFAULT_TABS} to Stencil on the first item only, then paste → ADD
+     for the rest (no re-Tab each time). Leave Flex alone until done.
 
 With serial (--with-serial):
-  Each unit: open Add Serial Unit, type Serial, Enter here — we Tab to Stencil + ADD
+  Each unit: type Serial at the top, Enter here — we Tab×${DEFAULT_TABS} to Stencil + ADD
 
 Options:
   --calibrate     Find the correct Tab count to Stencil (saves it)
   --app <name>    Browser (Zen, Google Chrome, …)
-  --tabs <n>      Tabs from top to Stencil (default: saved or ${DEFAULT_TABS})
-  --with-serial   Pause for Serial each unit
+  --tabs <n>      Tabs from top to Stencil (default: ${DEFAULT_TABS})
+  --with-serial   Pause for Serial each unit (Tabs every item)
   --delay <ms>    Pause after each ADD (default: ${DEFAULT_DELAY})
   --refocus-delay <ms>  Wait after activating browser (default: 700)
   --no-refocus    Do not activate browser
@@ -299,15 +300,21 @@ Leave Flex alone until it finishes — don’t click the terminal mid-run.
     }
 
     process.stdout.write(
-      `${YELLOW}→${RESET} [${i + 1}/${stencils.length}] Tab×${args.tabs} → ${BOLD}${stencil}${RESET}…\n`
+      `${YELLOW}→${RESET} [${i + 1}/${stencils.length}] ${
+        args.withSerial || isFirst
+          ? `Tab×${args.tabs} → `
+          : ""
+      }${BOLD}${stencil}${RESET}…\n`
     );
 
     try {
+      // Stencil-only: Tab only on the first item (reach Stencil once).
+      // With-serial: Tab every item (you're back on Serial after typing).
+      const tabsThisItem = args.withSerial || isFirst ? args.tabs : 0;
+
       await fillStencilAndSubmit(stencil, {
-        tabs: args.tabs,
+        tabs: tabsThisItem,
         flexApp,
-        // First keystroke (or after serial wait): activate browser.
-        // Later auto items: stay in Flex (refocus false) so we don't fight focus.
         refocus: args.refocus && (args.withSerial || isFirst),
         refocusDelayMs: args.refocusDelayMs,
         delayMs: 150,
@@ -456,9 +463,14 @@ async function main() {
       );
       if (!args.withSerial) {
         console.log(
-          `1. Enter once → activate ${app} → then for each: Tab×${args.tabs} → paste → Enter → wait`
+          `1. Enter once → activate ${app} → Tab×${args.tabs} → paste first → Enter`
         );
-        stencils.forEach((s, i) => console.log(`   ${i + 1}. ${s}`));
+        console.log(
+          `2+ paste → Enter only (no Tab) for remaining ${Math.max(0, stencils.length - 1)} items`
+        );
+        stencils.forEach((s, i) =>
+          console.log(`   ${i + 1}. ${s}${i === 0 ? "  (Tab×" + args.tabs + ")" : "  (paste only)"}`)
+        );
       } else {
         stencils.forEach((s, i) => {
           console.log(

@@ -32,17 +32,18 @@ Working title — rename anytime.
 
 Open Add Serial Unit, then answer yes when Stencil is focused. That Tab count is saved.
 
-**Stencil only (no serial)** — one Enter, then auto:
+**Stencil only (no serial)** — Tab×4 once, then paste-only:
 
 ```bash
 /flexac -n "USB Drive" -c 10 -l 41 --app Zen
 ```
 
 1. Open **Add Serial Unit**  
-2. Press **Enter once** in the terminal  
-3. We Tab → paste → ADD → wait → repeat for the whole batch  
+2. Press **Enter once**  
+3. First item: Tab×4 → Stencil → paste → ADD  
+4. Rest: paste → ADD only (no Tabbing unless `--with-serial`)
 
-**With serial** — Enter each unit after you type the serial:
+**With serial** — Tab×4 every unit (you’re on Serial after typing):
 
 ```bash
 /flexac -n "USB Drive" -c 10 -l 41 --app Zen --with-serial

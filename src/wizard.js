@@ -12,8 +12,8 @@ import { loadLastRun } from "./state.js";
 import { buildCounterValues } from "./serials.js";
 import { detectFlexApps } from "./keyboard.js";
 
-/** Serial → Barcode → RFID → Stencil */
-const DEFAULT_TABS_TO_STENCIL = 3;
+/** Serial → Barcode → RFID → (extra) → Stencil */
+const DEFAULT_TABS_TO_STENCIL = 4;
 
 async function ask(rl, label, { defaultValue, validate } = {}) {
   const hint =
@@ -169,8 +169,8 @@ ${BOLD}${GREEN}Plan${RESET}
   First:   ${stencils[0]}
   Last:    ${stencils.at(-1)}
   Total:   ${stencils.length}
-  Mode:    ${withSerial ? "with serial (Enter each unit)" : "stencil only (one Enter, then auto)"}
-  Path:    Tab×${tabs} → Stencil → paste → ADD
+  Mode:    ${withSerial ? "with serial (Tab every unit)" : "stencil only (Tab once, then paste-only)"}
+  Path:    Tab×${tabs} to Stencil${withSerial ? " each unit" : " on first item only"}
   Browser: ${flexApp}
 `);
 
