@@ -22,7 +22,7 @@ server.listen(port, () => {
   console.log(`Flex test form: http://localhost:${port}`);
   console.log("1. Open that URL and click Serial Number");
   console.log("2. In another terminal (stencil only):");
-  console.log("   node src/cli.js -n CAM -c 5 -l 100 --countdown 3");
+  console.log('   /flexac -n "USB Drive" -c 5 -l 40 --countdown 3');
   console.log("   Or with operator serials:");
-  console.log("   node src/cli.js -n CAM -c 5 -l 100 --with-serial");
+  console.log('   /flexac -n "USB Drive" -c 5 -l 40 --with-serial');
 });

@@ -10,8 +10,8 @@
   "scripts": {
     "start": "node src/cli.js",
     "test": "node --test test/*.test.js",
-    "demo": "node src/cli.js --dry-run --name UNIT --count 5 --last 100",
-    "demo:serial": "node src/cli.js --dry-run --with-serial --name UNIT --count 3 --last 100",
+    "demo": "node src/cli.js --dry-run --name \"USB Drive\" --count 5 --last 40",
+    "demo:serial": "node src/cli.js --dry-run --with-serial --name \"USB Drive\" --count 3 --last 40",
     "test-form": "node src/serve-test-form.js"
   },
   "engines": {

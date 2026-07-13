@@ -7,16 +7,22 @@ import { tabTypeAndEnter, sleep } from "./keyboard.js";
 
 /** Serial → Barcode → RFID → Stencil */
 const DEFAULT_TABS_TO_STENCIL = 3;
+/** Matches Flex inventory stencils like "USB Drive - 022" */
+const DEFAULT_PAD = 3;
+const DEFAULT_SEP = " - ";
 
 function printHelp() {
   console.log(`
 Flex Auto Counter — auto-fill incrementing Stencil values in Add Serial Unit.
 
+Stencil format (matches Flex lists):
+  "<name> - <zero-padded number>"  →  e.g. USB Drive - 022, USB Drive - 023
+
 Usage:
-  flex-auto-counter --name <prefix> --count <n> --last <n> [options]
+  /flexac --name <prefix> --count <n> --last <n> [options]
 
 Required:
-  --name, -n      Stencil prefix (e.g. CAM → CAM101, CAM102, …)
+  --name, -n      Stencil name/prefix (e.g. "USB Drive")
   --count, -c     How many units to add
   --last, -l      Last stencil number already used (next starts at last + 1)
 
@@ -27,8 +33,8 @@ Modes:
                   waits for Serial again (rinse / repeat)
 
 Options:
-  --pad <n>       Zero-pad the number (e.g. --pad 3 → CAM001)
-  --sep <s>       Separator between name and number (e.g. --sep - → CAM-101)
+  --pad <n>       Zero-pad width (default: ${DEFAULT_PAD} → 022)
+  --sep <s>       Between name and number (default: " - ")
   --tabs <n>      Tabs from Serial Number to Stencil (default: ${DEFAULT_TABS_TO_STENCIL})
                   Use --tabs 0 if you click Stencil yourself before each continue
   --delay <ms>    Pause after each ADD (default: 400)
@@ -37,12 +43,12 @@ Options:
   --help, -h      Show this help
 
 Examples:
-  # Most common: stencil only, auto submit
-  flex-auto-counter -n CAM -c 10 -l 100
-  flex-auto-counter -n CAM -c 10 -l 100 --dry-run
+  # Last stencil was USB Drive - 040; add the next 10 → 041 … 050
+  /flexac -n "USB Drive" -c 10 -l 40
+  /flexac -n "USB Drive" -c 10 -l 40 --dry-run
 
   # Operator types each serial, then continues for stencil + ADD
-  flex-auto-counter -n CAM -c 10 -l 100 --with-serial
+  /flexac -n "USB Drive" -c 10 -l 40 --with-serial
 
 Workflow (stencil only):
   1. Open Flex → Add Serial Unit (leave "Enter key mapped to ADD" checked)
@@ -63,8 +69,8 @@ function parseArgs(argv) {
     name: null,
     count: null,
     last: null,
-    pad: 0,
-    separator: "",
+    pad: DEFAULT_PAD,
+    separator: DEFAULT_SEP,
     tabs: DEFAULT_TABS_TO_STENCIL,
     delay: 400,
     countdown: 5,
