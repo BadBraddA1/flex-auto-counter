@@ -16,19 +16,32 @@ Working title — rename anytime.
 
 ## Terminal command: `/flexac`
 
-On this machine the CLI is available as **`flexac`** and **`/flexac`**.
-
 ```bash
-# Guided walkthrough + live status (recommended)
 /flexac
-
-# Or flags for scripting
-/flexac -n "USB Drive" -c 10 -l 40
-/flexac -n "USB Drive" -c 10 -l 40 --with-serial
-/flexac --help
 ```
 
-Running `/flexac` alone opens a terminal walkthrough: name → last number → count → mode → checklist → confirm. While it runs you get a status panel (progress bar, current/next stencil, recent ADDs). It remembers your last name/count/mode in `~/.config/flex-auto-counter/`.
+### If Tabbing messed up Flex / browser tabs
+
+That usually means keystrokes hit the wrong place. The tool now:
+
+1. Waits for **Enter in the terminal** (you click **Stencil** in Flex first)
+2. **Cmd+Tab** back to Flex
+3. **Pastes** the stencil (no Tabbing by default) and presses Enter
+
+Recommended flow:
+
+1. Open Add Serial Unit  
+2. Click the **Stencil** field  
+3. In the walkthrough, choose focus option **1) Stencil field**  
+4. When prompted, press Enter here  
+
+Use `--tabs 3` only if you want to start on Serial Number again.
+
+After a run it asks whether Flex looked correct before saving the next “last number”.
+
+```bash
+/flexac -n "USB Drive" -c 1 -l 41
+```
 
 Open a **new** terminal tab after install so `.zshenv` picks up the functions. Or run `source ~/.zshenv`.
 

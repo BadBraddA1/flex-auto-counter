@@ -76,18 +76,29 @@ ${BOLD}${CYAN}╔═════════════════════
 `);
 }
 
-export function printPrepChecklist(withSerial) {
+export function printPrepChecklist(withSerial, stencilDirect = true) {
   console.log(`${BOLD}Before we start${RESET}`);
   console.log(`  1. Open Flex → ${BOLD}Add Serial Unit${RESET}`);
   console.log(`  2. Leave ${BOLD}Enter key mapped to ADD${RESET} checked`);
   if (withSerial) {
-    console.log(`  3. Click ${BOLD}Serial Number${RESET}`);
+    console.log(`  3. Click ${BOLD}Serial Number${RESET}, type the serial`);
+    if (stencilDirect) {
+      console.log(`  4. Click ${BOLD}Stencil${RESET}, then press Enter ${BOLD}here${RESET}`);
+    } else {
+      console.log(
+        `  4. Leave focus on Serial, then press Enter ${BOLD}here${RESET} (tool Tabs to Stencil)`
+      );
+    }
+  } else if (stencilDirect) {
+    console.log(`  3. Click into the ${BOLD}Stencil${RESET} field in Flex`);
     console.log(
-      `  4. For each unit: type serial in Flex, then press Enter ${BOLD}here${RESET}`
+      `  4. Come back and press Enter ${BOLD}here${RESET} — we Cmd+Tab back to Flex and paste`
     );
   } else {
-    console.log(`  3. Click ${BOLD}Serial Number${RESET} (tool Tabs to Stencil)`);
-    console.log(`  4. Keep Flex in front during the countdown`);
+    console.log(`  3. Click ${BOLD}Serial Number${RESET}`);
+    console.log(
+      `  4. Press Enter ${BOLD}here${RESET} — we Cmd+Tab back to Flex, Tab to Stencil, paste`
+    );
   }
   console.log("");
 }

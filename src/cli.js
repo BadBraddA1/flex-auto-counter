@@ -3,50 +3,57 @@
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { buildCounterValues } from "./serials.js";
-import { tabTypeAndEnter, sleep } from "./keyboard.js";
+import { fillStencilAndSubmit, sleep } from "./keyboard.js";
 import { runWizard } from "./wizard.js";
 import { renderStatus, BOLD, GREEN, YELLOW, RED, RESET } from "./status.js";
 import { saveLastRun } from "./state.js";
 
-/** Serial → Barcode → RFID → Stencil */
-const DEFAULT_TABS_TO_STENCIL = 3;
 /** Matches Flex inventory stencils like "USB Drive - 022" */
 const DEFAULT_PAD = 3;
 const DEFAULT_SEP = " - ";
+/** Prefer Stencil-direct (0 tabs) — Tabbing often jumps browser/app chrome */
+const DEFAULT_TABS = 0;
 
 function printHelp() {
   console.log(`
 Flex Auto Counter — auto-fill incrementing Stencil values in Add Serial Unit.
 
-Stencil format (matches Flex lists):
-  "<name> - <zero-padded number>"  →  e.g. USB Drive - 022, USB Drive - 023
+Stencil format:  "USB Drive - 022"
 
 Usage:
   /flexac                         Interactive walkthrough + live status
   /flexac --name <n> --count <n> --last <n> [options]
 
+How typing works (important):
+  1. Click the Stencil field in Flex
+  2. Press Enter in this terminal
+  3. We Cmd+Tab back to Flex, paste the stencil, press Enter (ADD)
+  This avoids Tab keystrokes landing in Terminal or switching browser tabs.
+
 Required (flag mode):
-  --name, -n      Stencil name/prefix (e.g. "USB Drive")
+  --name, -n      Stencil name (e.g. "USB Drive")
   --count, -c     How many units to add
-  --last, -l      Last stencil number already used (next starts at last + 1)
+  --last, -l      Last stencil number already used
 
 Modes:
-  (default)       Auto: tab to Stencil → type next value → Enter → repeat
-  --with-serial   You type Serial Number; press Enter in this terminal to continue
+  (default)       Stencil only
+  --with-serial   You type Serial; Enter here to paste stencil + ADD
 
 Options:
-  --pad <n>       Zero-pad width (default: ${DEFAULT_PAD} → 022)
-  --sep <s>       Between name and number (default: " - ")
-  --tabs <n>      Tabs from Serial Number to Stencil (default: ${DEFAULT_TABS_TO_STENCIL})
-  --delay <ms>    Pause after each ADD (default: 400)
-  --countdown <s> Seconds before first keystroke in auto mode (default: 5)
+  --tabs <n>      Tabs before paste (default: ${DEFAULT_TABS} = click Stencil yourself)
+                  Use --tabs 3 to start on Serial Number instead
+  --no-refocus    Skip Cmd+Tab back to Flex (only if Flex is already frontmost)
+  --pad <n>       Zero-pad width (default: ${DEFAULT_PAD})
+  --sep <s>       Separator (default: " - ")
+  --delay <ms>    Pause after each ADD (default: 500)
+  --refocus-delay <ms>  Wait after Cmd+Tab (default: 550)
   --dry-run       Print the plan; no keyboard
   --help, -h      Show this help
 
 Examples:
   /flexac
   /flexac -n "USB Drive" -c 10 -l 40
-  /flexac -n "USB Drive" -c 10 -l 40 --with-serial
+  /flexac -n "USB Drive" -c 10 -l 40 --tabs 3
 `);
 }
 
@@ -57,9 +64,10 @@ function parseArgs(argv) {
     last: null,
     pad: DEFAULT_PAD,
     separator: DEFAULT_SEP,
-    tabs: DEFAULT_TABS_TO_STENCIL,
-    delay: 400,
-    countdown: 5,
+    tabs: DEFAULT_TABS,
+    delay: 500,
+    refocusDelayMs: 550,
+    refocus: true,
     withSerial: false,
     dryRun: false,
     help: false,
@@ -85,6 +93,9 @@ function parseArgs(argv) {
       case "--with-serial":
         args.withSerial = true;
         break;
+      case "--no-refocus":
+        args.refocus = false;
+        break;
       case "--name":
       case "-n":
         args.name = next();
@@ -109,8 +120,12 @@ function parseArgs(argv) {
       case "--delay":
         args.delay = Number(next());
         break;
+      case "--refocus-delay":
+        args.refocusDelayMs = Number(next());
+        break;
       case "--countdown":
-        args.countdown = Number(next());
+        // kept for compat; ignored — we use Enter-to-start now
+        next();
         break;
       default:
         throw new Error(`Unknown argument: ${a}`);
@@ -127,24 +142,18 @@ function showStatus(state) {
   console.log(renderStatus(state));
 }
 
-async function countdown(seconds, onTick) {
-  if (seconds <= 0) return;
-  for (let s = seconds; s > 0; s--) {
-    onTick?.(s);
-    await sleep(1000);
-  }
-}
-
 async function runSession(args, stencils, rl) {
   const modeLabel = args.withSerial
     ? "with serial (wait for you)"
-    : "stencil only (auto)";
+    : "stencil only";
+  const focusHint =
+    args.tabs === 0 ? "click Stencil in Flex" : "click Serial (Tab×" + args.tabs + ")";
   const recent = [];
   let done = 0;
 
   const base = () => ({
     name: args.name,
-    mode: modeLabel,
+    mode: `${modeLabel} · ${focusHint}`,
     total: stencils.length,
     done,
     current: null,
@@ -152,20 +161,6 @@ async function runSession(args, stencils, rl) {
     phase: "Starting",
     recent: [...recent],
   });
-
-  if (!args.withSerial) {
-    await countdown(args.countdown, (s) => {
-      showStatus({
-        ...base(),
-        phase: `Focus Serial Number in Flex — starting in ${s}s`,
-      });
-    });
-  } else {
-    showStatus({
-      ...base(),
-      phase: "Waiting — type Serial in Flex, then press Enter here",
-    });
-  }
 
   for (const [i, stencil] of stencils.entries()) {
     const next = stencils[i + 1] || null;
@@ -175,22 +170,40 @@ async function runSession(args, stencils, rl) {
         ...base(),
         current: stencil,
         next,
-        phase: `Waiting for serial — then Enter here for ${stencil}`,
+        phase: `Type Serial in Flex${args.tabs === 0 ? ", click Stencil" : ""}, then Enter here`,
       });
       await rl.question(
-        `${YELLOW}▸${RESET} Serial typed in Flex? Press ${BOLD}Enter${RESET} to fill stencil + ADD… `
+        `${YELLOW}▸${RESET} Serial ready? Press ${BOLD}Enter${RESET} to paste ${BOLD}${stencil}${RESET} + ADD… `
+      );
+    } else {
+      // Wait before each unit so Cmd+Tab can return to Flex after Terminal focus
+      showStatus({
+        ...base(),
+        current: stencil,
+        next,
+        phase:
+          args.tabs === 0
+            ? "Click Stencil in Flex, then press Enter here"
+            : "Click Serial in Flex, then press Enter here",
+      });
+      await rl.question(
+        `${YELLOW}▸${RESET} Flex ready (${focusHint})? Press ${BOLD}Enter${RESET} for ${BOLD}${stencil}${RESET}… `
       );
     }
 
-    showStatus({
-      ...base(),
-      current: stencil,
-      next,
-      phase: `Typing stencil → ADD`,
-    });
+    // Don't clear the screen right before keystrokes — keep Terminal quiet
+    process.stdout.write(
+      `${YELLOW}→${RESET} Switching to Flex, pasting ${BOLD}${stencil}${RESET}…\n`
+    );
 
     try {
-      await tabTypeAndEnter(stencil, { tabs: args.tabs });
+      await fillStencilAndSubmit(stencil, {
+        tabs: args.tabs,
+        // Always refocus after Enter in this terminal (Terminal became frontmost)
+        refocus: args.refocus,
+        refocusDelayMs: args.refocusDelayMs,
+        delayMs: 120,
+      });
     } catch (err) {
       showStatus({
         ...base(),
@@ -198,9 +211,22 @@ async function runSession(args, stencils, rl) {
         next,
         phase: `Error: ${err.message}`,
       });
+      console.error(`${RED}${err.message}${RESET}`);
       console.error(
-        `${RED}Stopped at ${stencil}.${RESET} On macOS: System Settings → Privacy & Security → Accessibility — allow Terminal/Cursor.`
+        "Tip: click Stencil in Flex, run again. Accessibility: System Settings → Privacy & Security → Accessibility."
       );
+      const savePartial = await rl.question(
+        `Save progress as last=${args.last + done}? (y/n) [n]: `
+      );
+      if (["y", "yes"].includes(savePartial.trim().toLowerCase()) && done > 0) {
+        saveLastRun({
+          name: args.name,
+          last: args.last + done,
+          count: args.count,
+          withSerial: args.withSerial,
+          tabs: args.tabs,
+        });
+      }
       process.exit(1);
     }
 
@@ -210,7 +236,7 @@ async function runSession(args, stencils, rl) {
       ...base(),
       current: stencil,
       next: stencils[done] || null,
-      phase: done === stencils.length ? "Done" : "Added — continuing",
+      phase: done === stencils.length ? "Done" : "Added — ready for next",
       recent: [...recent],
     });
 
@@ -219,16 +245,29 @@ async function runSession(args, stencils, rl) {
     }
   }
 
-  saveLastRun({
-    name: args.name,
-    last: args.last + stencils.length,
-    count: args.count,
-    withSerial: args.withSerial,
-  });
-
-  console.log(
-    `${GREEN}${BOLD}Done.${RESET} Added ${stencils.length}. Next last number to use: ${BOLD}${args.last + stencils.length}${RESET}\n`
+  const confirm = await rl.question(
+    `${GREEN}▸${RESET} Did Flex look correct? Save last number as ${BOLD}${args.last + stencils.length}${RESET}? (y/n) [y]: `
   );
+  const ok =
+    confirm.trim() === "" ||
+    ["y", "yes"].includes(confirm.trim().toLowerCase());
+
+  if (ok) {
+    saveLastRun({
+      name: args.name,
+      last: args.last + stencils.length,
+      count: args.count,
+      withSerial: args.withSerial,
+      tabs: args.tabs,
+    });
+    console.log(
+      `${GREEN}${BOLD}Saved.${RESET} Next time use last number: ${BOLD}${args.last + stencils.length}${RESET}\n`
+    );
+  } else {
+    console.log(
+      `${YELLOW}Not saved.${RESET} Keep using last number: ${BOLD}${args.last}${RESET}\n`
+    );
+  }
 }
 
 async function main() {
@@ -249,7 +288,10 @@ async function main() {
 
   const wantsWizard =
     argv.length === 0 ||
-    (args.name == null && args.count == null && args.last == null && !args.dryRun);
+    (args.name == null &&
+      args.count == null &&
+      args.last == null &&
+      !args.dryRun);
 
   const rl = readline.createInterface({ input, output });
 
@@ -289,11 +331,16 @@ async function main() {
         `Will fill ${stencils.length} stencils: ${stencils[0]} … ${stencils.at(-1)}`
       );
       for (const [i, stencil] of stencils.entries()) {
-        console.log(
-          args.withSerial
-            ? `${i + 1}. wait for serial → Enter → Tab×${args.tabs} → "${stencil}" → Enter`
-            : `${i + 1}. Tab×${args.tabs} → "${stencil}" → Enter`
-        );
+        const steps = [
+          "Enter here",
+          args.refocus !== false ? "Cmd+Tab→Flex" : null,
+          args.tabs > 0 ? `Tab×${args.tabs}` : null,
+          `paste "${stencil}"`,
+          "Enter",
+        ]
+          .filter(Boolean)
+          .join(" → ");
+        console.log(`${i + 1}. ${steps}`);
       }
       console.log("Dry run complete (nothing typed).");
       return;
